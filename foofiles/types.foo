@@ -4271,8 +4271,17 @@ module TYPES
      ! The segments of the density matrices separated the g unit cell
      ! vectors.
 
-   ! overlap_mx :: MAT3{REAL}@
-     ! The overlap matrix like above.
+     central_overlap_mx :: MAT{REAL}@
+     ! Central-cell overlap matrix read from the CRYSTAL23 XML.  Since the
+     ! XML does not carry Gaussian exponents or contraction coefficients,
+     ! this is used to verify the external Tonto basis before reconstruction.
+
+     overlap_mx :: MAT3{REAL}@
+     ! Direct-lattice overlap matrices.  The R/-R triangle orientation is
+     ! retained exactly as labelled by CRYSTAL23.
+
+     fock_mx :: MAT3{REAL}@
+     ! Direct-lattice Fock/Kohn--Sham matrices, when present in the XML.
 
    end
 

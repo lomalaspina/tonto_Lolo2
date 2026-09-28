@@ -1266,11 +1266,22 @@ contains
       ! Make sure basis set is spherical etc.
       .use_spherical_basis = TRUE
       .use_CRYSTAL23_order = TRUE
+      ! The ordering convention is embedded in cached solid-harmonic tables.
+      ! Rebuild them after switching to CRYSTAL's px,py,pz convention.
+      GAUSSIAN_DATA:set_CRYSTAL23_ordering(TRUE)
+      GAUSSIAN_DATA:set_indices(GAUSSIAN_DATA_L_MAX)
 
       ! Finalize atom info and esnsure it has basis set
       ! (Assuming basis set was set before this)
       .update_atom_basis_group_info   ! It uses .atom.group updated  
                                           ! Kang. Caution: (molecule).atom.group may not be correct when a molecule crosses the unit cell boundary
+
+      ! A CRYSTAL XML contains AO matrices but not the exponents and
+      ! contractions needed to evaluate them.  Refuse to combine those
+      ! matrices with a different-size Tonto basis.
+      DIE_IF(.n_bf/=.crystal23.n_bf, &
+             "CRYSTAL23 XML basis count differs from Tonto; use the exact CRYSTAL basis_directory and basis_name")
+
       .crystal.asymmetric_unit_atom.destroy
       .crystal.asymmetric_unit_geometry.destroy 
 
@@ -1314,11 +1325,17 @@ contains
       tmp  :: STR
       replace :: MAT{STR}@
       W   :: MAT{REAL}@
+      S,F :: MAT{REAL}@
+      S0  :: VEC{REAL}@
+      matrix_sorted :: MAT3{REAL}@
       av,bv,cv   :: VEC{REAL}(3)
       igv :: VEC{INT}(3)
       pos :: VEC{REAL}(3)
-      n_atoms,n_bf,n_g :: INT
-      a,g  :: INT 
+      nat,AO_count_for_atom,AO_first_for_atom,atom_order,AO_order :: VEC{INT}@
+      xml_atom_sorted :: VEC{ATOM}@
+      n_atoms,n_bf,n_g,n_tri :: INT
+      a,g,i,j,original_atom,swap_atom,AO_cursor,AO_index :: INT
+      found,reorder_AOs :: BIN
 
       if ( .crystal.fragment_atom.allocated ) .crystal.fragment_atom.destroy
 
@@ -1383,6 +1400,74 @@ contains
       XMLfile.move_to_line_item(2)
       XMLfile.read( n_bf )
       .crystal23.n_bf = n_bf
+
+      ! CRYSTAL's BASISSET shortcut normally writes complete atom/AO blocks
+      ! in descending atomic-number order, whereas an explicit general basis
+      ! may retain geometry order.  Canonicalize complete atom blocks and use
+      ! exactly the same AO permutation for every imported matrix.  The sort
+      ! is stable within one element, so inequivalent atoms of that element
+      ! retain their source-centre identity.
+      nat.create(n_atoms)
+      AO_count_for_atom.create(n_atoms)
+      AO_first_for_atom.create(n_atoms+1)
+      atom_order.create(n_atoms)
+      do a = 1,n_atoms
+         nat(a) = xml_atom(a).atomic_number
+         atom_order(a) = a
+         tmp = a.to_str
+         XMLfile.look_for("ATOMIC_ORBITALS_OF_ATOM."//trim(tmp))
+         XMLfile.move_to_line_item(3)
+         XMLfile.read(AO_count_for_atom(a))
+         DIE_IF(AO_count_for_atom(a)<=0, &
+                "invalid CRYSTAL23 XML atom-to-AO block size")
+      end
+      DIE_IF(sum(AO_count_for_atom)/=n_bf, &
+             "CRYSTAL23 XML atom-to-AO blocks do not span the AO basis")
+
+      ! Adjacent swaps make this a stable descending-Z sort, so inequivalent
+      ! sites of the same element retain their source-centre ordering.
+      do i = 1,n_atoms-1
+         do j = 1,n_atoms-i
+            if (nat(atom_order(j+1))>nat(atom_order(j))) then
+               swap_atom = atom_order(j)
+               atom_order(j) = atom_order(j+1)
+               atom_order(j+1) = swap_atom
+            end
+         end
+      end
+
+      AO_first_for_atom(1) = 1
+      do a = 1,n_atoms
+         AO_first_for_atom(a+1) = &
+            AO_first_for_atom(a)+AO_count_for_atom(a)
+      end
+      AO_order.create(n_bf)
+      AO_cursor = 0
+      do a = 1,n_atoms
+         original_atom = atom_order(a)
+         do AO_index = AO_first_for_atom(original_atom), &
+                       AO_first_for_atom(original_atom+1)-1
+            AO_cursor = AO_cursor+1
+            AO_order(AO_cursor) = AO_index
+         end
+      end
+      DIE_IF(AO_cursor/=n_bf,"invalid CRYSTAL23 XML atom-to-AO map")
+      reorder_AOs = FALSE
+      do a = 1,n_atoms
+         if (atom_order(a)/=a) reorder_AOs = TRUE
+      end
+
+      if (reorder_AOs) then
+         xml_atom_sorted.create(n_atoms)
+         xml_atom_sorted.set_axis_system_to("cartesian")
+         do a = 1,n_atoms
+            original_atom = atom_order(a)
+            xml_atom_sorted(a).set_label(xml_atom(original_atom).label)
+            xml_atom_sorted(a).set_position(xml_atom(original_atom).position)
+         end
+         xml_atom = xml_atom_sorted
+         xml_atom_sorted.destroy
+      end
       stdout.flush 
       stdout.text("=============")
       stdout.text("Crystal23 XML")
@@ -1395,8 +1480,11 @@ contains
       XMLfile.read( n_g )
       stdout.show("  Number of neighbor cells for ED calculation n_g =" ,n_g)
       .crystal23.n_g = n_g
+      DIE_IF(n_g<=0 OR mod(n_g-1,2)/=0, &
+             "CRYSTAL23 XML direct-lattice blocks must contain R=0 followed by R/-R pairs")
 
       ! Read the neighbor cell information
+      if (.crystal23.g_latt.allocated) .crystal23.g_latt.destroy
       .crystal23.g_latt.create(3,n_g)
       XMLfile.look_for("IVDL.1")
       do g = 1,n_g
@@ -1405,35 +1493,71 @@ contains
          .crystal23.g_latt(:,g) = igv
          XMLfile.read_line
       end
+      DIE_IF(any(.crystal23.g_latt(:,1)/=0), &
+             "CRYSTAL23 XML first direct-lattice block is not R=0")
+      do g = 2,n_g,2
+         DIE_IF(any((.crystal23.g_latt(:,g)+ &
+                     .crystal23.g_latt(:,g+1))/=0), &
+                "CRYSTAL23 XML direct-lattice blocks are not adjacent R/-R pairs")
+      end
 
-      ! Read overlap matrices
-   ! n_tri = n_bf*(n_bf+1)/2
-   ! S.create(n_tri,n_g)
-   ! do g = 1,n_g
-   !    tmp = g.to_str
-   !    XMLfile.look_for("DIRECT_OVERLAP_MATRIX__IVDL."//trim(tmp))
-   !    XMLfile.read_line
-   !    XMLfile.move_to_line_item(1)
-   !    XMLfile.read(S(:,g)) ! <-- ignore new lines
-   !  ! stdout.text("Stri"//trim(tmp)//":")
-   !  ! stdout.put(S(1:4,g))
-   ! end
+      ! Keep the XML overlap matrices.  The XML does not contain basis
+      ! exponents or contraction coefficients, so the central block is the
+      ! numerical identity check for the externally selected Tonto basis.
+      ! The read remains optional for compatibility with XML-like producers
+      ! that provide only density matrices; AO-count validation still applies.
+      n_tri = n_bf*(n_bf+1)/2
+      if (.crystal23.central_overlap_mx.allocated) &
+         .crystal23.central_overlap_mx.destroy
+      if (.crystal23.overlap_mx.allocated) .crystal23.overlap_mx.destroy
+      S0.create(n_tri)
+      XMLfile.look_for("DIRECT_OVERLAP_MATRIX__IVDL.1",found=found)
+      if (found) then
+         XMLfile.read_line
+         XMLfile.move_to_line_item(1)
+         XMLfile.read(S0)
 
-   ! ! Copy into full S matrices
-   ! .crystal23.overlap_mx.create(n_bf,n_bf,n_g)
-   ! .crystal23.overlap_mx(:,:,1).symmetric_unzip_triangle(S(:,1))
-   ! do g = 2,n_g,2
-   !    .crystal23.overlap_mx(:,:,g  ).unzip_triangles(S(:,g+1),S(:,g  ))
-   !    .crystal23.overlap_mx(:,:,g+1).unzip_triangles(S(:,g  ),S(:,g+1))
-   !  ! stdout.text("Check S:")
-   !  ! stdout.text("S"//trim(g.to_str))
-   !  ! stdout.put(.crystal23.overlap_mx(:,:,g  ))
-   !  ! g1 = g + 1
-   !  ! stdout.text("S"//trim(g1.to_str))
-   !  ! stdout.put(.crystal23.overlap_mx(:,:,g1 ))
-   ! end
+         S.create(n_tri,n_g)
+         S(:,1) = S0
+         do g = 2,n_g
+            tmp = g.to_str
+            XMLfile.look_for("DIRECT_OVERLAP_MATRIX__IVDL."//trim(tmp))
+            XMLfile.read_line
+            XMLfile.move_to_line_item(1)
+            XMLfile.read(S(:,g))
+         end
+
+         .crystal23.overlap_mx.create(n_bf,n_bf,n_g)
+         .crystal23.overlap_mx(:,:,1).symmetric_unzip_triangle(S(:,1))
+         do g = 2,n_g,2
+            ! Each record is the lower triangle of its labelled S(R).
+            ! Hermiticity supplies the upper triangle from S(-R)^T.  The old
+            ! reversed argument order attached S(-R) to R, making the Bloch
+            ! transform S(-k): the remembered extra phase-sign inversion.
+            .crystal23.overlap_mx(:,:,g  ).unzip_triangles(S(:,g  ),S(:,g+1))
+            .crystal23.overlap_mx(:,:,g+1).unzip_triangles(S(:,g+1),S(:,g  ))
+         end
+
+         if (reorder_AOs) then
+            matrix_sorted.create(n_bf,n_bf,n_g)
+            do g = 1,n_g
+               do i = 1,n_bf
+                  do j = 1,n_bf
+                     matrix_sorted(i,j,g) = &
+                        .crystal23.overlap_mx(AO_order(i),AO_order(j),g)
+                  end
+               end
+            end
+            .crystal23.overlap_mx = matrix_sorted
+            matrix_sorted.destroy
+         end
+         .crystal23.central_overlap_mx = .crystal23.overlap_mx(:,:,1)
+         S.destroy
+      end
+      S0.destroy
 
       ! Read full density matrices
+      if (.crystal23.density_mx.allocated) .crystal23.density_mx.destroy
       .crystal23.density_mx.create(n_bf,n_bf,n_g)
       W.create(n_bf,n_bf)
       do g = 1,n_g
@@ -1448,6 +1572,19 @@ contains
       ! stdout.put(.crystal23.density_mx(:,:,g))
       ! end
       end
+      if (reorder_AOs) then
+         matrix_sorted.create(n_bf,n_bf,n_g)
+         do g = 1,n_g
+            do i = 1,n_bf
+               do j = 1,n_bf
+                  matrix_sorted(i,j,g) = &
+                     .crystal23.density_mx(AO_order(i),AO_order(j),g)
+               end
+            end
+         end
+         .crystal23.density_mx = matrix_sorted
+         matrix_sorted.destroy
+      end
 
       stdout.text("  Reading Crystal23 Density matrix complete" )
       stdout.flush
@@ -1459,6 +1596,49 @@ contains
    !    stdout.text("P"//trim(g1.to_str))
    !    stdout.put(.crystal23.density_mx(:,:,g1 ))
    ! end
+
+      ! Retain the direct-lattice physical Fock/Kohn--Sham operator when the
+      ! XML contains it.  CRYSTAL uses the same paired-triangle convention as
+      ! for overlap, so use the same corrected R/-R orientation.
+      if (.crystal23.fock_mx.allocated) .crystal23.fock_mx.destroy
+      F.create(n_tri,n_g)
+      XMLfile.look_for("DIRECT_FOCK_KOHN-SHAM_MATRIX__IVDL.1",found=found)
+      if (found) then
+         XMLfile.read_line
+         XMLfile.move_to_line_item(1)
+         XMLfile.read(F(:,1))
+         do g = 2,n_g
+            tmp = g.to_str
+            XMLfile.look_for( &
+               "DIRECT_FOCK_KOHN-SHAM_MATRIX__IVDL."//trim(tmp))
+            XMLfile.read_line
+            XMLfile.move_to_line_item(1)
+            XMLfile.read(F(:,g))
+         end
+         .crystal23.fock_mx.create(n_bf,n_bf,n_g)
+         .crystal23.fock_mx(:,:,1).symmetric_unzip_triangle(F(:,1))
+         do g = 2,n_g,2
+            .crystal23.fock_mx(:,:,g  ).unzip_triangles(F(:,g  ),F(:,g+1))
+            .crystal23.fock_mx(:,:,g+1).unzip_triangles(F(:,g+1),F(:,g  ))
+         end
+         if (reorder_AOs) then
+            matrix_sorted.create(n_bf,n_bf,n_g)
+            do g = 1,n_g
+               do i = 1,n_bf
+                  do j = 1,n_bf
+                     matrix_sorted(i,j,g) = &
+                        .crystal23.fock_mx(AO_order(i),AO_order(j),g)
+                  end
+               end
+            end
+            .crystal23.fock_mx = matrix_sorted
+            matrix_sorted.destroy
+         end
+      end
+      F.destroy
+
+      if (reorder_AOs) &
+         stdout.text("  Canonicalized CRYSTAL atom and AO blocks by atomic number")
 
       ! Check number of electrons
    ! val = ZERO
@@ -1473,6 +1653,11 @@ contains
    ! stdout.show("N_e = ",val)
       XMLfile.close
       XMLfile.destroy
+      if (AO_order.allocated) AO_order.destroy
+      if (atom_order.allocated) atom_order.destroy
+      if (AO_first_for_atom.allocated) AO_first_for_atom.destroy
+      if (AO_count_for_atom.allocated) AO_count_for_atom.destroy
+      if (nat.allocated) nat.destroy
    end
 
 !  ======================
