@@ -3066,6 +3066,10 @@ module TYPES
      ! A keyword describing the desired accuracy of the integration
      ! grid.
 
+     accuracy_was_read :: BIN, readonly   DEFAULT(FALSE)
+     ! True only when the user supplied becke_grid={ accuracy= ... }.
+     ! Internal defaults may then be selected without overriding user input.
+
      l_angular_grid :: INT, readonly   DEFAULT(0)
      ! Angular momentum which is to be integrated exactly by the
      ! angular grid.
@@ -4181,11 +4185,16 @@ module TYPES
      ! vectors.
 
      central_overlap_mx :: MAT{REAL}@
-     ! Central-cell overlap matrix from the XML, used to check that Tonto
-     ! evaluates the density with the same basis.
+     ! Central-cell overlap matrix read from the CRYSTAL23 XML.  Since the
+     ! XML does not carry Gaussian exponents or contraction coefficients,
+     ! this is used to verify the external Tonto basis before reconstruction.
 
-   ! overlap_mx :: MAT3{REAL}@
-     ! The overlap matrix like above.
+     overlap_mx :: MAT3{REAL}@
+     ! Direct-lattice overlap matrices.  The R/-R triangle orientation is
+     ! retained exactly as labelled by CRYSTAL23.
+
+     fock_mx :: MAT3{REAL}@
+     ! Direct-lattice Fock/Kohn--Sham matrices, when present in the XML.
 
    end
 

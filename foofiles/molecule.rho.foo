@@ -5356,6 +5356,29 @@ contains
 
    end
 
+   validate_CRYSTAL23_basis_overlap :: leaky
+   ! Verify that the active Tonto Gaussian basis reproduces the central-cell
+   ! overlap read from CRYSTAL23.  Matching only n_bf cannot detect a different
+   ! basis with the same number of functions.
+      self :: INOUT
+
+      basis_overlap :: MAT{REAL}@
+      basis_overlap_error :: REAL
+
+      if (.crystal23.central_overlap_mx.deallocated) return
+      DIE_IF(.n_bf/=.crystal23.central_overlap_mx.dim1 OR &
+             .n_bf/=.crystal23.central_overlap_mx.dim2, &
+             "CRYSTAL23 XML overlap dimension differs from the Tonto basis")
+      basis_overlap.create(.n_bf,.n_bf)
+      .make_r_overlap_mx(basis_overlap)
+      basis_overlap_error = maxval(abs( &
+         basis_overlap-.crystal23.central_overlap_mx))
+      basis_overlap.destroy
+      DIE_IF(basis_overlap_error>TOL(4), &
+             "Tonto basis differs from CRYSTAL23 XML overlap; use the exact CRYSTAL basis_directory and basis_name")
+
+   end
+
    make_C23_Hirshfeld_atom_FFs(ff) :: leaky
    ! MAke "ff", the static Hirshfeld atom form factors (from a
    ! periodic CRYSTAL23 calculation) for the symmetry related K points
@@ -5374,35 +5397,20 @@ contains
 
       rho,wt,Wa :: VEC{REAL}@
       pt, k_pts :: MAT{REAL}@
-      basis_overlap :: MAT{REAL}@
       library_basis_labels :: VEC{STR}@
       library  :: STR(len=PATH_SIZE)
+      grid_accuracy :: STR
       cluster  :: CRYSTAL@
       HS_atoms :: VEC{ATOM}@
-      basis_overlap_error :: REAL
       sa,  k1,k2,k3,kr,sfr,sfi :: REAL
       n_atom, n_k,n_pt :: INT
       a,i,k :: INT
       sf :: CPX
       tmp_atom :: VEC{ATOM}@
-      found :: BIN
+      found,grid_accuracy_was_read :: BIN
       pos1,pos2 :: VEC{REAL}(3)
 
-      ! CRYSTAL23 exports the density and overlap matrices but not the basis
-      ! exponents or contractions, so check the externally chosen Tonto basis
-      ! against the central-cell XML overlap before using the density. The
-      ! CP2K bridge XML has no overlap block; there the basis-function count
-      ! checked during the XML import is the only guard.
-      if (.crystal23.central_overlap_mx.allocated) then
-         basis_overlap.create(.n_bf,.n_bf)
-         .make_r_overlap_mx(basis_overlap)
-         basis_overlap_error = maxval(abs(basis_overlap-.crystal23.central_overlap_mx))
-         if (basis_overlap_error>TOL(4)) then
-            stdout.show("Maximum CRYSTAL23/Tonto basis overlap difference =",basis_overlap_error)
-         end
-         basis_overlap.destroy
-         DIE_IF(basis_overlap_error>TOL(4),"Tonto basis differs from CRYSTAL23 XML overlap; use the exact CRYSTAL basis_directory and basis_name")
-      end
+      .validate_CRYSTAL23_basis_overlap
 
       ! Asymmetric unit atoms,
       ! Symmetry-generated K points and/or SF's
@@ -5506,20 +5514,23 @@ contains
       k_pts.create(n_k,3)
       .crystal.make_unique_X_SF_k_pts(k_pts)
 
-      ! Set up integration grid for the HS atom cluster.
-      ! Guarded, so that a becke_grid= block in the input is not destroyed and
-      ! silently replaced by the type defaults.
-      if (.becke_grid.deallocated) .becke_grid.create
-
-      ! An imported periodic density does want a denser grid than the molecular
-      ! default, especially for core-sensitive data. Ask for it in the INPUT:
-      !    becke_grid= { accuracy= extreme }
-      ! Forcing it here was removed 2026-08-23 (Dylan): it overrode an explicit
-      ! accuracy= without saying so, which is the defect docs/DFT_STANDARDISATION.md
-      ! was opened to remove. See docs/LOLO_CP2K_PORT.md section 4.1.
-      ! if (NOT .becke_grid.accuracy.is_one_of(["extreme","best   "])) then
-      !    .becke_grid.set_accuracy("extreme")
-      ! end
+      ! Recreate the grid for the HS atom cluster so no atom-specific radial or
+      ! angular data from earlier molecular processing survive. Preserve an
+      ! explicit user accuracy across that reset; otherwise use the medium
+      ! grid used by the validated corrected-XML implementation.
+      if (.becke_grid.allocated) then
+         grid_accuracy = .becke_grid.accuracy
+         grid_accuracy_was_read = .becke_grid.accuracy_was_read
+      else
+         grid_accuracy = "medium"
+         grid_accuracy_was_read = FALSE
+      end
+      .becke_grid.create
+      if (grid_accuracy_was_read) then
+         .becke_grid.set_accuracy(grid_accuracy)
+      else
+         .becke_grid.set_accuracy("medium")
+      end
 
       .becke_grid.set_atom_info(HS_atoms) ! NOT PURE. Kang note: HS_atoms = .becke_grid.atom
       .becke_grid.set_one_atom_grid_data
@@ -5553,11 +5564,10 @@ contains
          wt = Wa*wt
          Wa.destroy
 
-         ! Prune the grid with new "wt"
-         ! and new no of points, n_pt 
+         ! Prune the grid with the stockholder-weighted integration weights,
+         ! matching the validated corrected-XML implementation.
          .becke_grid.prune_grid(pt,wt)
-         n_pt = pt.dim1 ! *New* points
-         !!!!!!!!!!!!!!
+         n_pt = pt.dim1
     
          ! Density for atom "a"
          ! NOTE: only uses actual "pt" array for the C23 .atom

@@ -163,6 +163,10 @@ contains
    ! Set defaults
       val  :: BIN, IN
 
+      ! The ordering is baked into the derived solid-harmonic coefficient
+      ! tables. Mark the cached Gaussian data stale when the convention
+      ! changes so the next set_indices call rebuilds those tables.
+      if (val NEQV CRYSTAL23_ordering) l_max_saved = -1
       CRYSTAL23_ordering = val
 
    end
