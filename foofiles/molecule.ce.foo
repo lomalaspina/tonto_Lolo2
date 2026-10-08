@@ -343,14 +343,10 @@ contains
    
    ENSURE(.crystal.allocated, "no crystal")
 
-      tmp_Aatom :: VEC{ATOM}@
       umol_atom :: VEC{ATOM}@ ! new source for fragment_atom from unqiue molecules
       i,oi,m,um :: INT
       prune_ind,Z,Zs,perm :: VEC{INT}@
       b :: BIN
-
-      tmp_Aatom.create(.crystal.n_asymmetric_unit_atoms) 
-      tmp_Aatom = .crystal.asymmetric_unit_atom
 
       !stdout.text("Kang Debug: before defragment: .crystal.fragment_atom")
       !.crystal.fragment_atom.put_coordinates(no_header=TRUE)
@@ -419,7 +415,12 @@ contains
       .crystal.create_atom_list( umol_atom ) ! unique molecule atom is ready.
       umol_atom.update ! How can I redefine label or tags?
 
-      .crystal.destroy_asymmetric_unit
+      ! Keep the original CIF/XML asymmetric unit and its site-symmetry
+      ! representative. Rebuilding it from the grown unique molecule can
+      ! choose an arbitrary symmetry-equivalent image; the subsequent least-
+      ! squares shift would then be applied in the wrong local frame and may
+      ! introduce spurious free parameters. update_fragment_info preserves the
+      ! existing asymmetric unit while replacing the defragmented fragment.
       .crystal.update_fragment_info( umol_atom ) ! now crystal.fragment_atom are defragmented
       
 !>DEBUG  Show NEW .asymmetric_unit_atom ")

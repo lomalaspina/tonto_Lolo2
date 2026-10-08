@@ -93,6 +93,7 @@ contains
       case ("optimise_scale_factors=       "); .read_refine_scale
       case ("optimize_scale_factors=       "); .read_refine_scale
       case ("partition_model=              "); .read_partition_model
+      case ("stockholder_model=            "); .read_stockholder_model
    ! case ("prune_reflections             "); .prune_reflections ! Apply automatically?
 
       !  Put            
@@ -201,6 +202,7 @@ contains
       case ("refine_scale_factor=?         "); .docu_refine_scale(die)
       case ("refine_scale_factors=?        "); .docu_refine_scale(die)
       case ("partition_model=?             "); .docu_partition_model(die)
+      case ("stockholder_model=?           "); .docu_stockholder_model(die)
    ! case ("prune_reflections             "); .prune_reflections ! Apply automatically?(die)
       case ("put?                          "); .docu_put(die)
       case ("put_worst_reflections?        "); .docu_put_worst_reflections(die)
@@ -306,6 +308,7 @@ contains
       .docu_refine_extinction
       .docu_refine_scale
       .docu_partition_model
+      .docu_stockholder_model
 !   ! .prune_reflections ! Apply automatically?
       .docu_put
       .docu_put_worst_reflections
@@ -1203,6 +1206,35 @@ contains
 
       stdin.read(val)
       .set_partition_model(val)
+
+   end
+
+   docu_stockholder_model(die) :: selfless, private
+   ! Documentation.
+      die :: BIN, optional, IN
+      stdout.flush
+      stdout.text("stockholder_model= STR [cluster]")
+      stdout.flush
+      stdout.text(". Select the Hirshfeld stockholder denominator used with")
+      stdout.text("  partition_model= oc-crystal23.")
+      stdout.flush
+      stdout.text(". Allowed values are:")
+      stdout.text("     - cluster,  the finite HS-atom cluster (the default)")
+      stdout.text("     - periodic, a unit-cell/lattice-periodic procrystal")
+      stdout.flush
+      stdout.text(". This changes only the stockholder weights. The electron")
+      stdout.text("  density remains the density imported from CRYSTAL23 XML.")
+      if (present(die)) stop
+   end
+
+   read_stockholder_model :: private
+   ! Read the Hirshfeld stockholder denominator model.
+      self :: INOUT
+
+      val :: STR
+
+      stdin.read(val)
+      .set_stockholder_model(val)
 
    end
 

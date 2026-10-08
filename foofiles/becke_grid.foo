@@ -763,6 +763,7 @@ contains
 
       stdin.read(word)
       .set_accuracy(word)
+      .accuracy_was_read = TRUE
 
       .finalized = FALSE
 

@@ -3166,6 +3166,11 @@ module TYPES
      ! grid. "medium" with the Becke partition is 5e-8 from a converged
      ! reference on water; see docs/DFT_STANDARDISATION.md section 6b.
 
+     accuracy_was_read :: BIN, readonly   DEFAULT(FALSE)
+     ! True when the integration-grid accuracy was explicitly supplied by
+     ! the user. Imported periodic densities recreate their atom grid and
+     ! use this flag to preserve that explicit setting.
+
      l_angular_grid :: INT, readonly   DEFAULT(0)
      ! Angular momentum which is to be integrated exactly by the
      ! angular grid.
@@ -3688,6 +3693,11 @@ module TYPES
      partition_model :: STR, readonly   DEFAULT(" ")
      ! Model for partitioning the electron density of the fragment
      ! wavefunction into (possibly unique, possibly oversampled) bits
+
+     stockholder_model :: STR, readonly   DEFAULT("cluster")
+     ! Hirshfeld stockholder denominator used with an imported CRYSTAL23
+     ! density. "cluster" uses the finite HS-atom cluster; "periodic"
+     ! repeats neutral proatoms over the unit cell and lattice translations.
 
    ! temperature_factor_model :: STR, readonly   DEFAULT(" ")
    ! ! Thermal smearing model for the Fourier transform

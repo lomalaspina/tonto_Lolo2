@@ -322,6 +322,25 @@ contains
 
    end
 
+   set_stockholder_model(val) :: PURE
+   ! Set the Hirshfeld stockholder denominator used with the imported
+   ! CRYSTAL23 density. The density source and the partition definition
+   ! are independent choices.
+      self :: INOUT
+      val  :: STR, IN
+
+      options :: VEC{STR}@
+
+      options = [ "cluster ", &
+                  "periodic"  ]
+
+   ENSURE(val.is_one_of(options),"unknown stockholder_model, "//trim(val))
+
+      .stockholder_model = val
+      .stockholder_model.to_lower_case
+
+   end
+
    set_max_iterations(val) :: get_from(OBJECT:set, VAL_TYPE?=>INT, ARG?=>.max_iterations), pure
    ! Set the maximum number of iterations, for BOTH loops -- it caps
    ! .too_many_fit_iterations and .too_many_ref_iterations alike.
