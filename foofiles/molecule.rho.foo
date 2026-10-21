@@ -27,6 +27,8 @@
 
 module MOLECULE.RHO
 
+   USE crystal_xml_basis_io, only: xml_basis_finite_vector
+
    implicit none
 
 contains
@@ -5943,6 +5945,7 @@ contains
 
       basis_overlap :: MAT{REAL}@
       basis_overlap_error :: REAL
+      j :: INT
 
       if (.crystal23.central_overlap_mx.deallocated) return
       DIE_IF(.n_bf/=.crystal23.central_overlap_mx.dim1 OR &
@@ -5950,13 +5953,73 @@ contains
              "CRYSTAL23 XML overlap dimension differs from the Tonto basis")
       basis_overlap.create(.n_bf,.n_bf)
       .make_r_overlap_mx(basis_overlap)
+      if (.crystal23.xml_basis_file_name/=" ") then
+         do j = 1,.n_bf
+            DIE_IF(.not.xml_basis_finite_vector(basis_overlap(:,j)), &
+                   "CRYSTAL XML companion basis: nonfinite computed overlap")
+            DIE_IF(.not.xml_basis_finite_vector(.crystal23.central_overlap_mx(:,j)), &
+                   "CRYSTAL XML companion basis: nonfinite imported overlap")
+         end
+      end
       basis_overlap_error = maxval(abs( &
          basis_overlap-.crystal23.central_overlap_mx))
+      if (basis_overlap_error>TOL(4)) then
+         .put_CRYSTAL23_XML_overlap_failure(basis_overlap)
+         DIE("CRYSTAL23 XML basis overlap validation failed; inspect basis/order and source screening diagnostics")
+      end
       basis_overlap.destroy
+      if (.crystal23.xml_basis_file_name/=" ") &
+         stdout.text("Maximum CRYSTAL23/Tonto basis overlap difference = "// &
+                     trim(basis_overlap_error.to_str(fmt="es24.16")))
       DIE_IF(basis_overlap_error>TOL(4), &
              "Tonto basis differs from CRYSTAL23 XML overlap; use the exact CRYSTAL basis_directory and basis_name")
 
    end
+
+   put_CRYSTAL23_XML_overlap_failure(calculated) :: leaky, private
+   ! Diagnose the comparison without changing either matrix or its tolerance.
+      self :: IN
+      calculated :: MAT{REAL}, IN
+
+      zero_error,retained_error,difference :: REAL
+      zero_failures,retained_failures,i,j :: INT
+
+      zero_error = ZERO
+      retained_error = ZERO
+      zero_failures = 0
+      retained_failures = 0
+      do j = 1,.n_bf
+         do i = 1,.n_bf
+            difference = abs(calculated(i,j)-.crystal23.central_overlap_mx(i,j))
+            if (.crystal23.central_overlap_mx(i,j)==ZERO) then
+               zero_error = max(zero_error,difference)
+               if (difference>TOL(4)) zero_failures = zero_failures+1
+            else
+               retained_error = max(retained_error,difference)
+               if (difference>TOL(4)) retained_failures = retained_failures+1
+            end
+         end
+      end
+      difference = max(zero_error,retained_error)
+      stdout.text("Maximum CRYSTAL23/Tonto basis overlap difference = "// &
+                  trim(difference.to_str(fmt="es24.16")))
+      stdout.text("Maximum difference at source-zero overlaps .... "// &
+                  trim(zero_error.to_str(fmt="es24.16")))
+      stdout.text("Maximum difference at retained overlaps ....... "// &
+                  trim(retained_error.to_str(fmt="es24.16")))
+      stdout.text("Source-zero entries above tolerance ........... "//trim(zero_failures.to_str))
+      stdout.text("Retained entries above tolerance .............. "//trim(retained_failures.to_str))
+      if (retained_failures==0 AND zero_failures>0) then
+         stdout.text("Disagreement is confined to source-zero entries at this tolerance.")
+         stdout.text("Integral screening is a possible cause, not proof of a wrong basis.")
+      end
+      stdout.text("Check source basis, atom/AO order and CRYSTAL integral screening.")
+      stdout.text("If screening is responsible, rerun CRYSTAL with tighter TOLINTEG")
+      stdout.text("and regenerate the matching XML. More printed digits cannot recover")
+      stdout.text("screened integrals. Do not zero Tonto overlaps or alter the density.")
+
+   end
+
 
    make_C23_Hirshfeld_atom_FFs(ff) :: leaky
    ! MAke "ff", the static Hirshfeld atom form factors (from a

@@ -18,6 +18,7 @@ parallel (MPI) builds for that platform.
 | | |
 |---|---|
 | [**Running Tonto**](RUNNING_TONTO.md) | the main program, its options and input conventions |
+| [**CRYSTAL23 XML source basis**](CRYSTAL23_XML_BASIS.md) | importing an explicit companion basis with XML matrices |
 | [**Running `hart`**](RUNNING_HART.md) | standalone Hirshfeld atom refinement |
 | [**Running `rgbi`**](RUNNING_RGBI.md) | Roby-Gould bond indices and their pictures |
 | [**Installing the RGBI picture tools**](INSTALLING_RGBI.md) | LaTeX, Open Babel, mol2chemfig |

@@ -4252,6 +4252,9 @@ module TYPES
      xml_file_name :: STR(len=PATH_SIZE)  DEFAULT(" ")   ! a path
      ! The name of the C23 XML file to read the density mx from
 
+     xml_basis_file_name :: STR(len=PATH_SIZE) DEFAULT(" ")
+     ! Optional explicit source basis accompanying the CRYSTAL XML matrices.
+
      Primitive_unit_cell :: UNIT_CELL
      ! The primitive unit cell from Crystal23's XML file.
      ! Upon this unit cell, the density matrix is defined.

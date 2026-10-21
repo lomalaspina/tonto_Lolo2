@@ -947,8 +947,15 @@ add_dependencies(callgraphs antlr4-translator)
 add_library(tonto_lib
    ${FORTRAN_SRC}
    ${MACROS}
+   native/crystal_xml_basis_io.f90
 )
 set_target_properties(tonto_lib PROPERTIES OUTPUT_NAME tonto)
+
+# Retain finite-number checks at the external basis input boundary.
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(native/crystal_xml_basis_io.f90
+        PROPERTIES COMPILE_OPTIONS "-fno-fast-math")
+endif()
 
 # types.F90 contains no executable code of its own -- only the ~90 derived-type
 # definitions. But those types have ~585 allocatable/pointer components, so
@@ -1052,6 +1059,8 @@ target_include_directories(tonto_lib PUBLIC ${PROJECT_BINARY_DIR} ${CMAKE_CURREN
 
 
 # Standard executables
+add_executable(run_crystal_xml_basis_io native/test_crystal_xml_basis_io.f90)
+target_link_libraries(run_crystal_xml_basis_io tonto_lib)
 add_executable(tonto             ${CMAKE_CURRENT_BINARY_DIR}/run_molecule.F90)
 add_executable(run_buffer        EXCLUDE_FROM_ALL ${CMAKE_CURRENT_BINARY_DIR}/run_buffer.F90)
 add_executable(run_dc            EXCLUDE_FROM_ALL ${CMAKE_CURRENT_BINARY_DIR}/run_dc.F90)

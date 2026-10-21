@@ -1,0 +1,12 @@
+{
+   ! Analytic XML-import contract: H/He/H source order in a P1 cell.
+   ! Each H uses a different one-primitive Gaussian.  No library basis is set.
+   ! The companion maps source atoms to NAT=1, 2 and 101, respectively.
+   ! Sorting by atomic number moves He before both H atoms in Tonto.
+   name= xml_companion_contract
+
+   CIF= { file_name= input.cif }
+   c23_XML_file_name= input.xml
+   c23_xml_basis_file= source.basis
+   process_cif_and_c23_xml
+}

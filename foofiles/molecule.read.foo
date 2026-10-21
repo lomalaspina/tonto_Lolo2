@@ -53,6 +53,9 @@
 
 module MOLECULE.READ
 
+   USE crystal_xml_basis_io, only: xml_basis_load, xml_basis_dimensions, &
+                                  xml_basis_copy, xml_basis_clear, xml_basis_finite_vector
+
    implicit none
 
 contains
@@ -967,6 +970,9 @@ contains
 
    ENSURE(.crystal23.allocated,"There is no C23 xml file name!")
    ENSURE(.crystal23.xml_file_name /= " ","There is no C23 xml file name!")
+   DIE_IF(.crystal23.xml_basis_file_name/=" " AND &
+          .crystal23.xml_file_name==" ", &
+          "c23_xml_basis_file requires a CRYSTAL XML file")
    ! ENSURE(.atom.allocated,"Oi! Start with input CIF")
    ! ENSURE(.atom.dim==.crystal.n_unit_cell_atoms,"Oi!")
  
@@ -1259,9 +1265,16 @@ contains
          .atom(f).set_position( xml_atom(f).position )
          .atom(f).set_ADP_tensor( xml_atom(f).ADP_tensor )
          .atom(f).set_group(0) ! No group info. Reset to 0
+         if (.crystal23.xml_basis_file_name/=" ") then
+            .atom(f).set_basis_label(xml_atom(f).basis_label)
+            .atom(f).set_basis_kind("gaussian")
+         end
       end
       ! Destroy existing basis, and atom list
-      if (.basis.allocated) .basis.destroy
+      ! An explicit companion already supplied the atom-resolved basis.
+      if (.crystal23.xml_basis_file_name==" ") then
+         if (.basis.allocated) .basis.destroy
+      end
 
       ! Make sure basis set is spherical etc.
       .use_spherical_basis = TRUE
@@ -1281,6 +1294,33 @@ contains
       ! matrices with a different-size Tonto basis.
       DIE_IF(.n_bf/=.crystal23.n_bf, &
              "CRYSTAL23 XML basis count differs from Tonto; use the exact CRYSTAL basis_directory and basis_name")
+      if (.crystal23.xml_basis_file_name/=" ") then
+         DIE_IF(.crystal23.central_overlap_mx.deallocated, &
+                "CRYSTAL XML companion basis requires an exported overlap matrix")
+         ! IEEE checks remain active in the native no-fast-math boundary.
+         do j = 1,.crystal23.n_bf
+            do i = 1,.crystal23.density_mx.dim3
+               DIE_IF(.not.xml_basis_finite_vector(.crystal23.density_mx(:,j,i)), &
+                      "CRYSTAL XML companion basis: nonfinite density matrix")
+            end
+            if (.crystal23.overlap_mx.allocated) then
+               do i = 1,.crystal23.overlap_mx.dim3
+                  DIE_IF(.not.xml_basis_finite_vector(.crystal23.overlap_mx(:,j,i)), &
+                         "CRYSTAL XML companion basis: nonfinite overlap matrix")
+               end
+            end
+            if (.crystal23.fock_mx.allocated) then
+               do i = 1,.crystal23.fock_mx.dim3
+                  DIE_IF(.not.xml_basis_finite_vector(.crystal23.fock_mx(:,j,i)), &
+                         "CRYSTAL XML companion basis: nonfinite Fock matrix")
+               end
+            end
+         end
+         .validate_CRYSTAL23_basis_overlap
+         stdout.text("CRYSTAL XML companion basis imported and overlap validated")
+         stdout.show("CRYSTAL XML companion Fock matrix available =", &
+                     .crystal23.fock_mx.allocated)
+      end
 
       .crystal.asymmetric_unit_atom.destroy
       .crystal.asymmetric_unit_geometry.destroy 
@@ -1309,6 +1349,165 @@ contains
 
       xml_atom.destroy
       cif_atom.destroy
+   end
+
+   read_CRYSTAL23_XML_companion_basis(xml_atom,atom_order,z,ao_count,xml) :: private, leaky
+   ! Import explicit source radial functions; XML still supplies all matrices.
+   ! The map uses original XML centre indices, before canonical atom sorting.
+   ! CRYSTAL input coefficients multiply normalized primitive Gaussians; the
+   ! standard Tonto shell conversion therefore applies without a fitted scale.
+      self :: INOUT
+      xml_atom :: VEC{ATOM}, INOUT
+      atom_order,z,ao_count :: VEC{INT}, IN
+      xml :: TEXTFILE, INOUT
+
+      error_message :: STR(len=512)
+      basis :: BASIS@, target
+      sh :: SHELL*
+      atom_for_shell,angular,n_prim,first_prim,sequence :: VEC{INT}@
+      exponent,coefficient :: VEC{REAL}@
+      ao_type :: VEC{STR}@
+      basis_label,expected,letter,word :: STR
+      n_shell,n_primitive,a,source_atom,s,t,first,last,j,cursor,component,m :: INT
+
+      error_message = " "
+      n_shell = 0
+      n_primitive = 0
+      if (IO_IS_ALLOWED) then
+         call xml_basis_load(trim(.crystal23.xml_basis_file_name), &
+                             z,ao_count,error_message)
+         if (error_message==" ") call xml_basis_dimensions(n_shell,n_primitive)
+      end
+      PARALLEL_BROADCAST(error_message,tonto.master_processor)
+      DIE_IF(error_message/=" ","CRYSTAL XML companion basis: "//trim(error_message))
+      PARALLEL_BROADCAST(n_shell,tonto.master_processor)
+      PARALLEL_BROADCAST(n_primitive,tonto.master_processor)
+      DIE_IF(n_shell<=0 OR n_primitive<=0,"empty CRYSTAL XML companion basis")
+      atom_for_shell.create(n_shell)
+      angular.create(n_shell)
+      n_prim.create(n_shell)
+      first_prim.create(n_shell)
+      exponent.create(n_primitive)
+      coefficient.create(n_primitive)
+      if (IO_IS_ALLOWED) then
+         call xml_basis_copy(atom_for_shell,angular,n_prim,first_prim, &
+                             exponent,coefficient,error_message)
+         call xml_basis_clear
+      end
+      PARALLEL_BROADCAST(error_message,tonto.master_processor)
+      DIE_IF(error_message/=" ","CRYSTAL XML companion basis: "//trim(error_message))
+      PARALLEL_BROADCAST(atom_for_shell,tonto.master_processor)
+      PARALLEL_BROADCAST(angular,tonto.master_processor)
+      PARALLEL_BROADCAST(n_prim,tonto.master_processor)
+      PARALLEL_BROADCAST(first_prim,tonto.master_processor)
+      PARALLEL_BROADCAST(exponent,tonto.master_processor)
+      PARALLEL_BROADCAST(coefficient,tonto.master_processor)
+
+      ! Reject ambiguous within-centre component conventions rather than
+      ! using an arbitrary overlap congruence to conceal them.
+      cursor = 0
+      do source_atom = 1,z.dim
+         xml.move_to_line(1)
+         word = source_atom.to_str
+         xml.look_for("ATOMIC_ORBITALS_OF_ATOM."//trim(word))
+         xml.look_for("SEQUENCE_NUMBER_LABEL")
+         xml.read_line
+         sequence.create(ao_count(source_atom))
+         xml.read(sequence)
+         do j = 1,sequence.dim
+            DIE_IF(sequence(j)/=cursor+j, &
+                   "CRYSTAL XML companion basis: noncontiguous AO sequence")
+         end
+         sequence.destroy
+         xml.look_for("TYPE")
+         xml.read_line
+         ao_type.create(ao_count(source_atom))
+         xml.read(ao_type)
+         cursor = cursor+ao_count(source_atom)
+         j = 0
+         do s = 1,n_shell
+            if (atom_for_shell(s)/=source_atom) cycle
+            do component = 1,2*angular(s)+1
+               select case (angular(s))
+               case (0)
+                  expected = "S"
+               case (1)
+                  select case (component)
+                  case (1); expected = "PX"
+                  case (2); expected = "PY"
+                  case (3); expected = "PZ"
+                  end
+               case default
+                  select case (angular(s))
+                  case (2); letter = "D"
+                  case (3); letter = "F"
+                  case (4); letter = "G"
+                  end
+                  if (component==1) then
+                     expected = trim(letter)//"00"
+                  else
+                     m = component/2
+                     if (mod(component,2)==0) then
+                        expected = trim(letter)//"+"//trim(m.to_str)
+                     else
+                        expected = trim(letter)//"-"//trim(m.to_str)
+                     end
+                  end
+               end
+               j = j+1
+               DIE_IF(trim(ao_type(j))/=trim(expected), &
+                      "CRYSTAL XML companion basis: shell/component order differs from XML")
+            end
+         end
+         ao_type.destroy
+      end
+      xml.move_to_line(1)
+
+      if (.basis.allocated) .basis.destroy
+      .basis.create(0)
+      .basis_name = " "
+      do a = 1,xml_atom.dim
+         source_atom = atom_order(a)
+         basis.create
+         basis.n_shell = count(atom_for_shell==source_atom)
+         basis.shell.create(basis.n_shell)
+         t = 0
+         do s = 1,n_shell
+            if (atom_for_shell(s)/=source_atom) cycle
+            t = t+1
+            sh => basis.shell(t)
+            sh.set_l(angular(s))
+            sh.n_cc = n_prim(s)
+            first = first_prim(s)
+            last = first+n_prim(s)-1
+            sh.exponent.create(n_prim(s))
+            sh.contraction.create(n_prim(s))
+            sh.exponent = exponent(first:last)
+            sh.contraction = coefficient(first:last)
+         end
+         basis.set_spherical(TRUE)
+         basis.unnormalize
+         do t = 1,basis.n_shell
+            sh => basis.shell(t)
+            DIE_IF(.not.xml_basis_finite_vector(sh.contraction), &
+                   "CRYSTAL XML companion basis: nonfinite normalized contraction")
+            DIE_IF(all(sh.contraction==ZERO), &
+                   "CRYSTAL XML companion basis: normalized contraction underflow")
+         end
+         basis_label = trim(xml_atom(a).generic_chemical_symbol)// &
+                       ":crystal-xml-"//trim(source_atom.to_str)
+         basis.set_label(basis_label)
+         xml_atom(a).set_basis_label(basis_label)
+         xml_atom(a).set_basis_kind("gaussian")
+         .basis.append(basis)
+         basis.destroy
+      end
+      atom_for_shell.destroy
+      angular.destroy
+      n_prim.destroy
+      first_prim.destroy
+      exponent.destroy
+      coefficient.destroy
    end
 
    read_CRYSTAL23_xml(base, xml_atom) :: private, leaky
@@ -1468,6 +1667,8 @@ contains
          xml_atom = xml_atom_sorted
          xml_atom_sorted.destroy
       end
+      if (.crystal23.xml_basis_file_name/=" ") &
+         .read_CRYSTAL23_XML_companion_basis(xml_atom,atom_order,nat,AO_count_for_atom,XMLfile)
       stdout.flush 
       stdout.text("=============")
       stdout.text("Crystal23 XML")

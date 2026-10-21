@@ -496,6 +496,10 @@ contains
 
       results :: BIN
       output  :: BIN
+      external_density :: BIN
+
+      ! The XML periodic density is separate from the molecular density_mx.
+      external_density = .crystal.xray_data.partition_model=="oc-crystal23"
       
       ! This is a rigid-atom fit
       .crystal.xray_data.set_fit_structure(TRUE)
@@ -508,7 +512,7 @@ contains
       .make_atom_partition_info
 
       ! Initial SCF
-      if (.density_mx.deallocated) then
+      if (.density_mx.deallocated AND NOT external_density) then
          if (output) then
             stdout.flush
             stdout.text("Initial density matrix for refinement ...")

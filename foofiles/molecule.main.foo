@@ -213,6 +213,7 @@ contains
       case ("becke_grid=                   "); .read_becke_grid
 
       case ("c23_xml_file_name=            "); .read_C23_XML_file_name
+      case ("c23_xml_basis_file=           "); .read_C23_XML_basis_file
       case ("cp2k_periodic_file_name=      "); .read_C23_XML_file_name
       case ("canonicalise_occupied_mos     "); .canonicalize_occupied_MOs
       case ("canonicalize_occupied_mos     "); .canonicalize_occupied_MOs
@@ -956,6 +957,15 @@ contains
    end
 
 !  C
+
+   read_C23_XML_basis_file :: leaky
+   ! Read the explicit general-basis companion for a CRYSTAL XML import.
+      self :: INOUT
+
+      if (.crystal23.deallocated) .crystal23.create
+      stdin.read(.crystal23.xml_basis_file_name)
+
+   end
 
    read_C23_XML_file_name :: leaky
    ! Read in the Becke integration grid data

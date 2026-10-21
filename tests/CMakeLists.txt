@@ -375,6 +375,19 @@ add_dependencies(report tonto run_har)
 # would keep whatever the machine's BLAS chose by default -- exactly the
 # inconsistency the pinning exists to remove.  Applied here in one loop rather
 # than per add_test, so a test added later cannot quietly miss it.
+add_test(NAME xml_companion_basis_parser
+    COMMAND $<TARGET_FILE:run_crystal_xml_basis_io>)
+set_tests_properties(xml_companion_basis_parser PROPERTIES LABELS "short")
+
+add_test(NAME xml_companion_basis_contract
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/check_crystal_xml_companion_basis.py
+            --program ${TONTO_EXE}
+            --fixture ${PROJECT_SOURCE_DIR}/tests/short/crystal_xml_companion_basis)
+set_tests_properties(xml_companion_basis_contract PROPERTIES LABELS "short")
+add_test(NAME xml_companion_reflection_comparison
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/test_crystal_xml_companion_real.py)
+set_tests_properties(xml_companion_reflection_comparison PROPERTIES LABELS "short")
+
 set(_tonto_test_env
     OMP_NUM_THREADS=1
     OPENBLAS_NUM_THREADS=1

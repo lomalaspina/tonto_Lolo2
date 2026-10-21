@@ -1,0 +1,207 @@
+_______________________________________________________________
+
+ T   O   N   T   O
+
+ A free object-based system for computational chemistry
+
+ Version: 26.10.16 v. c81eab01
+ Platform: Linux-6.18.40.1-microsoft-standard-WSL2
+ Build-date: 2026.10.16 18:11
+ Compiler: GNU 14.2.0
+ LAPACK: 3.12.0
+
+ For conditions of use, on-line documentation, and contributor
+ and developer information see :-
+
+ https://github.com/dylan-jayatilaka/tonto
+
+ Dylan Jayatilaka
+ Daniel Grimwood
+ Peter Spackman
+_______________________________________________________________
+
+
+Timer started at 18/10/2026 13:34:07.
+
+
+=============
+Crystal23 XML
+=============
+  Number of basis function per unit cell      n_bf=... 3
+  Number of neighbor cells for ED calculation n_g .... 1
+  Reading Crystal23 Density matrix complete
+
+  Canonicalized CRYSTAL atom and AO blocks by atomic number
+Maximum CRYSTAL23/Tonto basis overlap difference = 2.2204460492503131E-16
+CRYSTAL XML companion basis imported and overlap validated
+CRYSTAL XML companion Fock matrix available .... T
+
+
+=====================
+Unit cell information
+=====================
+
+. Lengths are in Angstrom
+. Angles  are in degrees
+
+a cell parameter ............   5.291772(0)
+b cell parameter ............   5.291772(0)
+c cell parameter ............   5.291772(0)
+Cell volume ................. 148.184711(0)
+
+alpha angle .................  90.000000(0)
+beta  angle .................  90.000000(0)
+gamma angle .................  90.000000(0)
+
+a* cell parameter (A^-1) .... 0.188973
+b* cell parameter (A^-1) .... 0.188973
+c* cell parameter (A^-1) .... 0.188973
+
+alpha* angle (degree) ....... 90.000000
+beta*  angle (degree) ....... 90.000000
+gamma* angle (degree) ....... 90.000000
+
+Direct cell matrix
+            1         2         3
+
+  1  5.291772  0.000000  0.000000
+  2  0.000000  5.291772  0.000000
+  3  0.000000  0.000000  5.291772
+
+Reciprocal cell matrix
+            1         2         3
+
+  1  0.188973  0.000000  0.000000
+  2  0.000000  0.188973  0.000000
+  3  0.000000  0.000000  0.188973
+
+
+======================
+Spacegroup information
+======================
+
+International Table no. .... 1
+IT symbol .................. 1
+Hermann-Mauguin symbol ..... P 1
+Hall symbol ................ P 1
+Schoenflies symbol ......... c1^1
+Lattice symbol ............. P
+Lattice type ............... Triclinic
+
+Spacegroup order ........... 1
+Centro-symmetric? .......... F
+Axis orders ................   1   1   1   1
+Axis direction symbols .....   z   _   _   _
+Axis direction indices .....   3   0   0   0
+Translation subscripts ..... ___ ___ ___
+No of T generators ......... 1
+No of R generators ......... 0
+No of Generators ........... 1
+Origin shift in 12-ths .....   0   0   0
+
+
+===================
+Symmetry operations
+===================
+
+_________________
+
+  #    Symop
+_________________
+
+  1  +x, +y, +z
+_________________
+
+
+=====================================
+Seitz matrices in crystal axis system
+=====================================
+
+
+matrix .... 1
+
+         1      2      3      4
+
+  1  1.000  0.000  0.000  0.000
+  2  0.000  1.000  0.000  0.000
+  3  0.000  0.000  1.000  0.000
+  4  0.000  0.000  0.000  1.000
+
+
+===============================
+Spacegroup multiplication table
+===============================
+
+. The element in the table is product(i,j) where:
+
+     product(i,j) = symop(i) x symop(j)
+
+  where i and j are row and column indices, respectively
+  and the product is modulo an integer shift vector.
+
+______
+
+  #  1
+______
+
+  1  1
+______
+
+
+==============================
+Spacegroup symop inverse table
+==============================
+____________
+
+  #  Inverse
+       symop
+____________
+
+  1        1
+____________
+
+
+====================================
+Inversion-translation-related symops
+====================================
+
+. The information in this table is used to speed up
+  structure factor calculations since the Fourier transform
+  of densities related by such related symops are related by
+  complex conjugation and/or a multiplicative phase factor
+
+_____________________________________
+
+  # Related to   Related to   Unique
+     Inversion   Translation  symop?
+    of symop #   of symop #
+_____________________________________
+
+  1      0            1        yes
+_____________________________________
+ =======================================
+ Integrated CIF and Crystal23's XML data
+ =======================================
+_______________________________________________
+
+  #  ID    Z  Grp     - x -     - y -     - z -
+         /au    #                  /A
+_______________________________________________
+
+  1  He  2.0    1  1.058354  2.116709  1.058354
+  2  H1  1.0    2  1.058354  1.058354  1.058354
+  3  H2  1.0    1  2.116709  1.058354  1.058354
+_______________________________________________
+____________________________________________________________________________________________________________
+
+  #  ID      U_xx      U_yy      U_zz      U_xy      U_xz      U_yz     U_iso     M_ani  NPD  Flat      Axis
+                                 /A^2                                    /A^2      /A^2    ?     ?     ratio
+____________________________________________________________________________________________________________
+
+  1  He  0.010000  0.010000  0.010000  0.000000  0.000000  0.000000  0.010000  0.000000    F     F  1.000000
+  2  H1  0.010000  0.010000  0.010000  0.000000  0.000000  0.000000  0.010000  0.000000    F     F  1.000000
+  3  H2  0.010000  0.010000  0.010000  0.000000  0.000000  0.000000  0.010000  0.000000    F     F  1.000000
+____________________________________________________________________________________________________________
+
+Wall-clock time taken for job "xml_companion_contract" is , 8 milliseconds.
+CPU time taken for job "xml_companion_contract" is 0.008 CPU seconds.

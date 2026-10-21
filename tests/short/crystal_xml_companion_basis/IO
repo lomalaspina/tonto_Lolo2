@@ -1,0 +1,5 @@
+! Standalone user-example input, with semantic negative controls executed by
+! scripts/check_crystal_xml_companion_basis.py.  No external XML is required.
+   input : input.cif
+   input : input.xml
+   input : source.basis
