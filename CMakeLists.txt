@@ -1061,6 +1061,11 @@ target_include_directories(tonto_lib PUBLIC ${PROJECT_BINARY_DIR} ${CMAKE_CURREN
 # Standard executables
 add_executable(run_crystal_xml_basis_io native/test_crystal_xml_basis_io.f90)
 target_link_libraries(run_crystal_xml_basis_io tonto_lib)
+add_executable(run_crystal_xml_overlap_cache native/test_crystal_xml_overlap_cache.F90)
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(run_crystal_xml_overlap_cache PRIVATE -fno-fast-math)
+endif()
+target_link_libraries(run_crystal_xml_overlap_cache tonto_lib ${LAPACK_LIBRARIES} ${MPI_LIBRARIES})
 add_executable(tonto             ${CMAKE_CURRENT_BINARY_DIR}/run_molecule.F90)
 add_executable(run_buffer        EXCLUDE_FROM_ALL ${CMAKE_CURRENT_BINARY_DIR}/run_buffer.F90)
 add_executable(run_dc            EXCLUDE_FROM_ALL ${CMAKE_CURRENT_BINARY_DIR}/run_dc.F90)

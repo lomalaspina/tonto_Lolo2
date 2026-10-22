@@ -4284,6 +4284,16 @@ module TYPES
      ! The segments of the density matrices separated the g unit cell
      ! vectors.
 
+     ! Successful XML-only validation cache, owned by this import object.
+     ! Reuse requires exact finite basis/geometry/layout/source-S equality.
+     ! No filenames, hashes, tolerances or persistent cross-job cache are used.
+     xml_overlap_cache_enabled :: BIN DEFAULT(FALSE)
+     xml_overlap_cache_valid :: BIN DEFAULT(FALSE)
+     xml_overlap_cache_state :: VEC{REAL}@
+     xml_overlap_cache_source :: MAT{REAL}@
+     xml_overlap_cache_evaluations :: INT DEFAULT(0)
+     xml_overlap_cache_hits :: INT DEFAULT(0)
+
      central_overlap_mx :: MAT{REAL}@
      ! Central-cell overlap matrix read from the CRYSTAL23 XML.  Since the
      ! XML does not carry Gaussian exponents or contraction coefficients,

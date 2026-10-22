@@ -27,7 +27,8 @@
 
 module MOLECULE.RHO
 
-   USE crystal_xml_basis_io, only: xml_basis_finite_vector
+   USE crystal_xml_basis_io, only: xml_basis_finite_vector, xml_basis_same_finite_vector
+   USE GAUSSIAN_DATA_MODULE, only: CRYSTAL23_ordering
 
    implicit none
 
@@ -5937,6 +5938,93 @@ contains
    end
 
 
+
+   make_CRYSTAL23_XML_overlap_state(state) :: private, leaky
+   ! Exact descriptor of the inputs to the central-cell overlap calculation.
+   ! Explicit snapshots avoid hash collisions and never use a fuzzy tolerance.
+   ! Shell-pair rebuilds also invalidate the cache in update_shell_info.
+      self :: IN
+      state :: VEC{REAL}@, OUT
+
+      sh :: SHELL1
+      a,s,k,p,n,expected :: INT
+
+      DIE_IF(NOT .basis_info_made, "CRYSTAL XML overlap validation: basis information is not ready")
+      DIE_IF(.atom.deallocated, "CRYSTAL XML overlap validation: missing atoms")
+      DIE_IF(.n_atom/=.atom.dim OR .n_atom<=0 OR .n_shell<=0, &
+             "CRYSTAL XML overlap validation: invalid atom/shell dimensions")
+      DIE_IF(.n_shell_pairs/=.n_shell*(.n_shell+1)/2, &
+             "CRYSTAL XML overlap validation: invalid shell-pair dimensions")
+      DIE_IF(.atom_for_shell.deallocated OR .atom_shell_for_shell.deallocated OR &
+             .basis_shell_for_shell.deallocated OR .first_basis_fn_for_shell.deallocated OR &
+             .last_basis_fn_for_shell.deallocated, &
+             "CRYSTAL XML overlap validation: missing atom/AO mapping")
+      DIE_IF(.atom_for_shell.dim/=.n_shell OR .atom_shell_for_shell.dim/=.n_shell OR &
+             .basis_shell_for_shell.dim/=.n_shell OR .first_basis_fn_for_shell.dim/=.n_shell OR &
+             .last_basis_fn_for_shell.dim/=.n_shell, &
+             "CRYSTAL XML overlap validation: invalid atom/AO mapping dimensions")
+
+      n = 18 + 4*.n_atom
+      expected = 1
+      do k = 1,.n_shell
+         a = .atom_for_shell(k)
+         s = .atom_shell_for_shell(k)
+         DIE_IF(a<1 OR a>.n_atom, "CRYSTAL XML overlap validation: invalid atom/shell mapping")
+         DIE_IF(.atom(a).basis.deallocated, "CRYSTAL XML overlap validation: missing atom basis")
+         DIE_IF(.atom(a).basis.shell.deallocated, "CRYSTAL XML overlap validation: missing shells")
+         DIE_IF(s<1 OR s>.atom(a).basis.shell.dim, &
+                "CRYSTAL XML overlap validation: invalid atom/shell mapping")
+         DIE_IF(.basis_shell_for_shell(k)<1 OR .basis_shell_for_shell(k)>.n_unique_shells, &
+                "CRYSTAL XML overlap validation: invalid basis-shell mapping")
+         .set_shell1_from(k,sh)
+         DIE_IF(sh.exponent.deallocated OR sh.contraction.deallocated, &
+                "CRYSTAL XML overlap validation: missing primitive data")
+         DIE_IF(sh.n_cc<=0 OR sh.exponent.dim/=sh.n_cc OR sh.contraction.dim/=sh.n_cc, &
+                "CRYSTAL XML overlap validation: invalid primitive dimensions")
+         DIE_IF(.first_basis_fn_for_shell(k)/=expected OR &
+                .last_basis_fn_for_shell(k)/=expected+sh.n_bf-1, &
+                "CRYSTAL XML overlap validation: invalid AO shell ranges")
+         expected = expected + sh.n_bf
+         n = n + 14 + 2*sh.n_cc
+      end
+      DIE_IF(expected/=.n_bf+1 OR .n_bf/=.crystal23.n_bf, &
+             "CRYSTAL XML overlap validation: invalid AO dimensions")
+
+      state.create(n)
+      state(1:6) = [.n_atom,.n_bf,.n_shell,.n_shell_pairs,.n_unique_shells,.basis_l_max]
+      state(7:9) = ZERO
+      if (.use_spherical_basis) state(7) = ONE
+      if (.use_CRYSTAL23_order) state(8) = ONE
+      if (CRYSTAL23_ordering) state(9) = ONE
+      p = 9
+      do k = 1,3
+         state(p+1:p+3) = .crystal23.Primitive_unit_cell.direct_mx(:,k)
+         p = p+3
+      end
+      do a = 1,.n_atom
+         state(p+1) = .atom(a).atomic_number
+         state(p+2:p+4) = .atom(a).position
+         p = p+4
+      end
+      do k = 1,.n_shell
+         .set_shell1_from(k,sh)
+         state(p+1:p+12) = [.atom_for_shell(k),.atom_shell_for_shell(k), &
+            .basis_shell_for_shell(k),.first_basis_fn_for_shell(k), &
+            .last_basis_fn_for_shell(k),sh.l,sh.n_comp,sh.n_sph,sh.n_bf, &
+            sh.n_cc,sh.first_gaussian,sh.last_gaussian]
+         state(p+13) = ZERO
+         if (sh.is_spherical) state(p+13) = ONE
+         state(p+14) = iachar(sh.l_chr(1:1))
+         p = p+14
+         state(p+1:p+sh.n_cc) = sh.exponent
+         p = p+sh.n_cc
+         state(p+1:p+sh.n_cc) = sh.contraction
+         p = p+sh.n_cc
+      end
+      DIE_IF(NOT xml_basis_finite_vector(state), &
+             "CRYSTAL XML overlap validation: nonfinite basis or geometry")
+   end
+
    validate_CRYSTAL23_basis_overlap :: leaky
    ! Verify that the active Tonto Gaussian basis reproduces the central-cell
    ! overlap read from CRYSTAL23.  Matching only n_bf cannot detect a different
@@ -5944,16 +6032,55 @@ contains
       self :: INOUT
 
       basis_overlap :: MAT{REAL}@
+      overlap_state :: VEC{REAL}@
       basis_overlap_error :: REAL
       j :: INT
+      cache_enabled,cache_hit :: BIN
 
-      if (.crystal23.central_overlap_mx.deallocated) return
+      if (.crystal23.central_overlap_mx.deallocated) then
+         .crystal23.xml_overlap_cache_valid = FALSE
+         DIE_IF(.crystal23.xml_overlap_cache_enabled AND .crystal23.xml_basis_file_name/=" ", &
+                "CRYSTAL XML companion basis requires an exported overlap matrix")
+         return
+      end
       DIE_IF(.n_bf/=.crystal23.central_overlap_mx.dim1 OR &
              .n_bf/=.crystal23.central_overlap_mx.dim2, &
              "CRYSTAL23 XML overlap dimension differs from the Tonto basis")
+
+      cache_enabled = .crystal23.xml_overlap_cache_enabled
+      if (cache_enabled) then
+         .make_CRYSTAL23_XML_overlap_state(overlap_state)
+         do j = 1,.n_bf
+            DIE_IF(NOT xml_basis_finite_vector(.crystal23.central_overlap_mx(:,j)), &
+                   "CRYSTAL XML overlap validation: nonfinite imported overlap")
+         end
+         cache_hit = .crystal23.xml_overlap_cache_valid
+         if (.crystal23.xml_overlap_cache_state.deallocated OR &
+             .crystal23.xml_overlap_cache_source.deallocated) cache_hit = FALSE
+         if (cache_hit) then
+            cache_hit = xml_basis_same_finite_vector( &
+               overlap_state,.crystal23.xml_overlap_cache_state)
+            if (.crystal23.xml_overlap_cache_source.dim1/=.n_bf OR &
+                .crystal23.xml_overlap_cache_source.dim2/=.n_bf) cache_hit = FALSE
+         end
+         if (cache_hit) then
+            do j = 1,.n_bf
+               if (NOT xml_basis_same_finite_vector( &
+                   .crystal23.central_overlap_mx(:,j), &
+                   .crystal23.xml_overlap_cache_source(:,j))) cache_hit = FALSE
+            end
+         end
+         if (cache_hit) then
+            .crystal23.xml_overlap_cache_hits = .crystal23.xml_overlap_cache_hits + 1
+            overlap_state.destroy
+            return
+         end
+         .crystal23.xml_overlap_cache_valid = FALSE
+         .crystal23.xml_overlap_cache_evaluations = .crystal23.xml_overlap_cache_evaluations + 1
+      end
       basis_overlap.create(.n_bf,.n_bf)
       .make_r_overlap_mx(basis_overlap)
-      if (.crystal23.xml_basis_file_name/=" ") then
+      if (cache_enabled OR .crystal23.xml_basis_file_name/=" ") then
          do j = 1,.n_bf
             DIE_IF(.not.xml_basis_finite_vector(basis_overlap(:,j)), &
                    "CRYSTAL XML companion basis: nonfinite computed overlap")
@@ -5973,6 +6100,18 @@ contains
                      trim(basis_overlap_error.to_str(fmt="es24.16")))
       DIE_IF(basis_overlap_error>TOL(4), &
              "Tonto basis differs from CRYSTAL23 XML overlap; use the exact CRYSTAL basis_directory and basis_name")
+
+      if (cache_enabled) then
+         .crystal23.xml_overlap_cache_state.destroy
+         .crystal23.xml_overlap_cache_source.destroy
+         .crystal23.xml_overlap_cache_state.create(overlap_state.dim)
+         .crystal23.xml_overlap_cache_source.create(.n_bf,.n_bf)
+         .crystal23.xml_overlap_cache_state = overlap_state
+         .crystal23.xml_overlap_cache_source = .crystal23.central_overlap_mx
+         .crystal23.xml_overlap_cache_valid = TRUE
+         overlap_state.destroy
+      end
+
 
    end
 

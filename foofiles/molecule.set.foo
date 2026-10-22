@@ -2843,6 +2843,10 @@ contains
    ! and precalculated shell info for integrals.
       self :: INOUT
 
+      ! Derived Gaussian-pair data is about to be rebuilt. An earlier XML
+      ! overlap result must not survive that rebuild, even for the same name.
+      if (.crystal23.allocated) .crystal23.xml_overlap_cache_valid = FALSE
+
    ENSURE(.atom.allocated,"no atom information")
    ENSURE(.atom.bases_are_resolved,"gaussian bases not all resolved")
    ENSURE(.n_atom>0,"no atoms")

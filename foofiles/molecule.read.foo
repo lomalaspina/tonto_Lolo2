@@ -1539,6 +1539,12 @@ contains
       if ( .crystal.fragment_atom.allocated ) .crystal.fragment_atom.destroy
 
       ! Open XML file
+      .crystal23.xml_overlap_cache_valid = FALSE
+      .crystal23.xml_overlap_cache_enabled = TRUE
+      .crystal23.xml_overlap_cache_evaluations = 0
+      .crystal23.xml_overlap_cache_hits = 0
+      .crystal23.xml_overlap_cache_state.destroy
+      .crystal23.xml_overlap_cache_source.destroy
       XMLfile.create(base)
       replace.create(3,2)
       replace(:,1) = [  "<" ,  ">",   "=" ]

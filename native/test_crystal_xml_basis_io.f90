@@ -7,7 +7,7 @@ program test_crystal_xml_basis_io
   character(len=512) :: error
   character(len=256) :: base(10), rows(10)
   integer :: ns, np, checks, unit, ios
-  real(real64) :: nonfinite
+  real(real64) :: nonfinite, empty(0)
   integer, allocatable :: atom(:), angular(:), count(:), first(:)
   real(real64), allocatable :: exponent(:), coefficient(:)
 
@@ -22,6 +22,28 @@ program test_crystal_xml_basis_io
   call require(.not.xml_basis_finite_vector([1.0_real64,nonfinite]), 'infinite vector member')
   nonfinite = ieee_value(0.0_real64,ieee_quiet_nan)
   call require(.not.xml_basis_finite_vector([nonfinite,1.0_real64]), 'NaN vector member')
+  call require(xml_basis_same_finite_vector([1.0_real64,-2.0_real64], &
+                                            [1.0_real64,-2.0_real64]), 'identical finite cache inputs')
+  call require(.not.xml_basis_same_finite_vector([1.0_real64], [1.0_real64,2.0_real64]), &
+               'different cache input lengths')
+  call require(.not.xml_basis_same_finite_vector([1.0_real64], [nearest(1.0_real64,1.0_real64)]), &
+               'one ULP cache input change invalidates equality')
+  call require(xml_basis_same_finite_vector([0.0_real64], [-0.0_real64]), &
+               'signed zeros have equal cache input values')
+  call require(xml_basis_same_finite_vector(empty,empty), 'equal empty cache inputs')
+  call require(.not.xml_basis_same_finite_vector([nonfinite], [1.0_real64]), &
+               'NaN in left cache input')
+  call require(.not.xml_basis_same_finite_vector([1.0_real64], [nonfinite]), &
+               'NaN in right cache input')
+  call require(.not.xml_basis_same_finite_vector([nonfinite], [nonfinite]), &
+               'NaN on both sides must not give cache equality')
+  nonfinite = ieee_value(0.0_real64,ieee_positive_inf)
+  call require(.not.xml_basis_same_finite_vector([nonfinite], [nonfinite]), &
+               'infinity on both sides must not give cache equality')
+  call require(.not.xml_basis_same_finite_vector([1.0_real64], [nonfinite]), &
+               'infinity in right cache input')
+  call require(.not.xml_basis_same_finite_vector([-nonfinite], [1.0_real64]), &
+               'negative infinity in left cache input')
   base = [character(len=256) :: &
     '6 2 # carbon', '0 1 2 4.0 1.0', '2.0 0.25 -0.2', '0.5 0.75 0.8', &
     '0 3 1 0.0 1.0', '0.2 1.0', '1 1', '0 0 1 1.0 1.0', '1.d0 1.0', '99 0']

@@ -108,6 +108,37 @@ basis and XML from the same source calculation. This option does not repair
 incomplete or inconsistent XML, infer missing radial functions, or establish
 that a chosen molecular basis is well conditioned in a periodic system.
 
+### Avoiding repeated overlap integrals
+
+After a successful check, Tonto retains an in-memory snapshot for that XML
+import. A later check reuses the successful result only when the actual basis
+exponents/contractions, atom positions, shell/AO layout, ordering settings and
+imported central overlap values are exactly unchanged. Comparison uses no
+rounding, hash or numerical tolerance. Dimension/mapping and finite-value
+safeguards remain active; only repeated Gaussian-overlap evaluation is skipped.
+
+Every new XML read starts fresh, even if its filename and contents are the
+same. Rebuilding the shell-pair data also invalidates the snapshot. Geometry,
+basis or source-overlap changes require a fresh successful comparison. The
+cache belongs to the import object and is not saved between jobs; passing one
+HAR cycle does not exempt subsequent XML imports from validation.
+
+There is no user bypass switch and the overlap tolerance remains `1e-4`.
+This optimization does not change CRYSTAL's `TOLINTEG`, any imported matrix,
+the reconstructed density or the refinement model. It requires one additional
+real central-overlap matrix in memory (approximately `8*nAO*nAO` bytes).
+
+The short test `xml_overlap_cache_integration` loads the analytic XML fixture
+through the production reader, then checks cache hits and invalidation after
+rereads and changes to geometry, basis, overlap or ordering. Invalid dimensions,
+atom/AO mappings and NaN/Inf values must be rejected even after a successful
+cached check. It also verifies that a hit does not modify the imported overlap
+or density matrices. Build `run_crystal_xml_overlap_cache`, then run:
+
+```sh
+ctest --test-dir <build-directory> -R '^xml_overlap_cache_integration$' --output-on-failure
+```
+
 CRYSTAL's exported overlap can contain screened-out entries, whereas Tonto
 evaluates the corresponding Gaussian overlaps explicitly. Consequently, the
 current maximum-element check can reject a correct source basis when a small

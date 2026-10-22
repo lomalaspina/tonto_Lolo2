@@ -6,7 +6,7 @@ module crystal_xml_basis_io
   implicit none
   private
   public :: xml_basis_load, xml_basis_dimensions, xml_basis_copy, xml_basis_clear
-  public :: xml_basis_finite_vector
+  public :: xml_basis_finite_vector, xml_basis_same_finite_vector
 
   integer, parameter :: max_line = 8192, max_token = 256
   integer, parameter :: max_blocks = 4096, max_shells = 10000
@@ -33,6 +33,18 @@ contains
   logical function xml_basis_finite_vector(values) result(ok)
     real(real64), intent(in) :: values(:)
     ok = all(ieee_is_finite(values))
+  end function
+
+  ! Cache identity is exact numerical equality, never an overlap tolerance.
+  ! Check shapes before comparing arrays and reject nonfinite values even if
+  ! they occur in both snapshots. Signed zeros represent the same input.
+  logical function xml_basis_same_finite_vector(left, right) result(ok)
+    real(real64), intent(in) :: left(:), right(:)
+    ok = .false.
+    if (size(left) /= size(right)) return
+    if (.not. xml_basis_finite_vector(left)) return
+    if (.not. xml_basis_finite_vector(right)) return
+    ok = all(left == right)
   end function
 
   ! Release all retained data. Failed loads also leave this empty state.

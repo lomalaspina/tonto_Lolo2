@@ -87,6 +87,14 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/rgbi)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/long)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cx)
 
+# Production import/cache contract: unchanged state hits; changed state is
+# checked again, including malformed mappings and nonfinite matrices.
+add_test(NAME xml_overlap_cache_integration
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/check_crystal_xml_overlap_cache.py
+            --program $<TARGET_FILE:run_crystal_xml_overlap_cache>
+            --fixture ${PROJECT_SOURCE_DIR}/tests/short/crystal_xml_companion_basis)
+set_tests_properties(xml_overlap_cache_integration PROPERTIES LABELS "short")
+
 # Invariant test -- no reference output involved.
 #
 # Below d functions the spherical and cartesian basis sets are mathematically
