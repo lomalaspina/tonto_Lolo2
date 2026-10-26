@@ -3112,8 +3112,13 @@ contains
 
       else
 
-         ! Use this as last resort
+         ! Imported source atoms may not yet have refinement-error storage.
+         ! Preserve any coordinate errors while initializing the harmonic
+         ! block before the component assignments below.
          val = .U_iso_error
+         .pADP_errors.create(9)
+         .pADP_errors = ZERO
+         .pADP_errors(1:3) = .position_error
 
       end
 

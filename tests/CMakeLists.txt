@@ -89,6 +89,14 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cx)
 
 # Production import/cache contract: unchanged state hits; changed state is
 # checked again, including malformed mappings and nonfinite matrices.
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/refinement-identity)
+add_test(NAME refinement_identity
+    COMMAND $<TARGET_FILE:run_refinement_identity>
+            ${PROJECT_SOURCE_DIR}/native/refinement_identity.in
+            ${PROJECT_SOURCE_DIR}/basis_sets
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/refinement-identity)
+set_tests_properties(refinement_identity PROPERTIES LABELS "short")
+
 add_test(NAME xml_overlap_cache_integration
     COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/check_crystal_xml_overlap_cache.py
             --program $<TARGET_FILE:run_crystal_xml_overlap_cache>

@@ -50,7 +50,7 @@ contains
 
       ! Set up atom partition info
       select case (model)
-      case("oc-crystal23  "); .make_HA_info
+      case("oc-crystal23  "); .make_HA_info(skip_moments=TRUE)
       case("oc-g-hirshfeld"); .make_HA_info
       case("oc-g-salvador "); .make_SA_info
       case("oc-hirshfeld  "); .make_HA_info
@@ -89,6 +89,18 @@ contains
 
       skip_ANO :: BIN
       skip_mom :: BIN
+      periodic_fragment :: VEC{ATOM}@
+
+      ! Source AOs belong to .atom; preserve the separate HAR fragment.
+      if (.crystal.allocated) then
+      if (.crystal.xray_data.allocated) then
+      if (.crystal.xray_data.partition_model=="oc-crystal23") then
+      if (.crystal.fragment_info_made) then
+         periodic_fragment = .crystal.fragment_atom
+      end
+      end
+      end
+      end
 
       ! An imported CRYSTAL23 density has no molecular SCF block, but the
       ! neutral Hirshfeld reference atoms still need ordinary atomic-SCF
@@ -134,6 +146,11 @@ contains
 
       ! Assign NO's to MO's for density evaluation
    ! if (.MOs.allocated) .assign_NOs_to_MOs
+
+      if (periodic_fragment.allocated) then
+         .crystal.update_fragment_info(periodic_fragment)
+         periodic_fragment.destroy
+      end
 
    end
 

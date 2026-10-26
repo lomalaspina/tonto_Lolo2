@@ -693,13 +693,7 @@ contains
       ! Print out bond length, angle, torsion tables with errors
       .crystal.put_bond_info_with_errors
 
-      ! Finally: remake .asymmetric_unit_atom/unit_cell geometry from
-      ! .fragment_atom, which *must* be assigned since it must point
-      ! to molecule.atom
-      .crystal.asymmetric_unit_atom.destroy
-      .crystal.asymmetric_unit_geometry.destroy
-      .crystal.asymmetric_unit_source = "tonto-ls-structure-fit"
-      .crystal.update_fragment_info(.crystal.fragment_atom)
+      .crystal.refresh_refined_fragment_info
 
       ! Set geometry type
       .crystal.asymmetric_unit_source = "tonto-refinement"

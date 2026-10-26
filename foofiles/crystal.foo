@@ -4539,13 +4539,7 @@ contains
          .put_bond_info_with_errors
       end
 
-      ! Finally: remake .asymmetric_unit_atom/unit_cell geometry from
-      ! .fragment_atom, which *must* be assigned since it must point
-      ! to molecule.atom
-      .asymmetric_unit_atom.destroy
-      .asymmetric_unit_geometry.destroy
-      .asymmetric_unit_source = "tonto-ls-structure-fit"
-      .update_fragment_info(.fragment_atom)
+      .refresh_refined_fragment_info
 
    end
 
@@ -4680,13 +4674,25 @@ contains
          .put_X_data_analysis
       end
 
-      ! Finally: remake .asymmetric_unit_atom/unit_cell geometry 
-      ! from the .fragment_atom. A bit crazy since these held
-      ! the refined geometry. Think of it as a refresh for crystal.
-      .asymmetric_unit_atom.destroy
-      .asymmetric_unit_geometry.destroy
+      .refresh_refined_fragment_info
+
+   end
+
+   refresh_refined_fragment_info :: leaky
+   ! Rebuild cell and fragment maps in the accepted asymmetric-atom order.
+   ! The fitted vector and covariance matrix use that same order.
+      self :: INOUT
+
+      refined_asym,refined_fragment :: VEC{ATOM}@
+
+      refined_asym = .asymmetric_unit_atom
+      refined_fragment = .fragment_atom
+      .destroy_asymmetric_unit
       .asymmetric_unit_source = "tonto-ls-structure-fit"
-      .update_fragment_info(.fragment_atom)
+      .update_fragment_info(refined_asym)
+      .update_fragment_info(refined_fragment)
+      refined_fragment.destroy
+      refined_asym.destroy
 
    end
 
@@ -5469,7 +5475,8 @@ contains
 
       u1,f1,a1,s1,n1, u1b,u1f,u1l, a1b,a1f,a1l :: INT
       u2,f2,a2,s2,n2, u2b,u2f,u2l, a2b,a2f,a2l :: INT
-      dim  :: INT
+      dim,i,j :: INT
+      variance_product :: REAL
       T1,T2 :: MAT{REAL}@
       acov  :: MAT{REAL}@
       seitz :: MAT3{REAL}@
@@ -5538,6 +5545,18 @@ contains
 
       ! Overwrite ufrag-atom cov mx with asym-atom cov mx
       .xray_data.covariance_mx = acov ! <<<<<<
+
+      ! Printed labels and their correlations use asymmetric-atom order.
+      if (.xray_data.correlation_mx.deallocated) &
+         .xray_data.correlation_mx.create(dim,dim)
+      .xray_data.correlation_mx = ZERO
+      do j = 1,dim
+      do i = 1,dim
+         variance_product = acov(i,i)*acov(j,j)
+         if (variance_product>ZERO) .xray_data.correlation_mx(i,j) = &
+            acov(i,j)/sqrt(variance_product)
+      end
+      end
 
       ! Clean
       acov.destroy

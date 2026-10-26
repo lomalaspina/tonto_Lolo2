@@ -1,0 +1,26 @@
+{
+   ! Synthetic sites only. The test gives the HAR fragment a different order
+   ! from the basis-source atoms, while retaining the same crystal geometry.
+   name= refinement_identity
+   basis_name= STO-3G
+   crystal= {
+      spacegroup= { hermann_mauguin_symbol= "P 4/m" }
+      unit_cell= {
+         angles= 90 90 90 Degree
+         dimensions= 8 8 10 Angstrom
+      }
+      xray_data= { partition_model= oc-crystal23 }
+   }
+   atoms= {
+      keys= {
+         label= { axis_system= crystal }
+         pos= { units= angstrom^2 }
+         thermal_tensor=
+      }
+      data= {
+         O1  0.11 0.21 0.31  0.010 0.020 0.030 0 0 0
+         O2  0.25 0.32 0.00  0.020 0.030 0.040 0 0 0
+         O3  0.00 0.00 0.27  0.030 0.030 0.050 0 0 0
+      }
+   }
+}
