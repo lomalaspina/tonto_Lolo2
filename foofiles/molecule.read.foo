@@ -1145,7 +1145,10 @@ contains
             xml_pos = matmul(.crystal23.Primitive_unit_cell.inverse_mx, xml_pos) ! xml_pos in fractional coordinate of the Primitive cell (from the Crystal23 XML file)
             !
             tmp_vec = cif_pos - xml_pos     ! tmp_vec is difference in PRIMITIVE crystal coordinate
-            tmp_vec =MOD(tmp_vec+HALF+ONE,ONE)-HALF ! Stable "modulo 1" function whose range is [-0.5, 0.5)
+            ! CIF restart clusters can contain representatives many cells away.
+            ! MOD keeps the dividend sign and fails for negative translations;
+            ! MODULO wraps every integer translate into [-0.5,0.5).
+            tmp_vec = modulo(tmp_vec+HALF,ONE)-HALF
             tmp_vec = matmul( xuc ,tmp_vec )! Now, tmp_vec in Cartensian coordinate ([Bohr] unit)
             !
             same = tmp_vec.is_zero(0.1d0)   ! same atom criteria: distance < 0.1 Bohr

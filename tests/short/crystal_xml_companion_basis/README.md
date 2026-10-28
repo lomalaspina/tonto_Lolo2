@@ -26,6 +26,14 @@ also tested in reversed order to ensure that element/block order does not
 replace the source-atom map.
 
 The fixture and its companion are analytic and require no GRED or KRED file.
+The short test `crystal_xml_translated_cif` moves each CIF representative by
+several positive and negative lattice translations while keeping the XML and
+companion unchanged. All translated imports must pass the same overlap check.
+A further non-lattice displacement of 0.2 bohr must still fail atom matching;
+the matching tolerance remains 0.1 bohr. Run this check directly with
+`python3 scripts/check_crystal_xml_translated_cif.py --program build/tonto
+--fixture tests/short/crystal_xml_companion_basis`.
+
 A separate control adds deliberately invalid native-export decoys to the
 job directory; the XML import must still succeed unchanged. Those unrelated
 files must not supply a hidden basis or matrix fallback.

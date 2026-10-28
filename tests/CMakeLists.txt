@@ -87,6 +87,13 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/rgbi)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/long)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cx)
 
+# Translating CIF representatives by whole cells must preserve XML matching.
+add_test(NAME crystal_xml_translated_cif
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/check_crystal_xml_translated_cif.py
+            --program ${TONTO_EXE}
+            --fixture ${PROJECT_SOURCE_DIR}/tests/short/crystal_xml_companion_basis)
+set_tests_properties(crystal_xml_translated_cif PROPERTIES LABELS "short")
+
 # Production import/cache contract: unchanged state hits; changed state is
 # checked again, including malformed mappings and nonfinite matrices.
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/refinement-identity)
