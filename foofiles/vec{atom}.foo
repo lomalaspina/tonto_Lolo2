@@ -2208,6 +2208,58 @@ contains
       ! Read standard/crystal U's as last resort
       .read_smCIF_ADP2_xtal(cif,fail)
 
+      ! Tonto's restart CIF also carries unrounded crystal-axis tensors.
+      ! Overlay those after the standard data (which still supply isotropic U).
+      .read_smCIF_ADP2_cryst_precise(cif)
+
+   end
+
+   read_smCIF_ADP2_cryst_precise(cif) :: private, leaky
+   ! Prefer precise restart tensors to publication-rounded standard Uij.
+   ! Both forms use crystallographic axes; these are NOT Cartesian tensors.
+      self :: INOUT
+      cif :: CIF, INOUT
+
+      labels,IDs,esd :: VEC{STR}@
+      U,dU :: MAT{REAL}@
+      fl,fu,fd :: BIN
+      i,ind :: INT
+      lab :: STR
+
+      cif.read_looped_item("_atom_site_Cryst_ADP2_U_label",labels,fl)
+      if (NOT fl) return
+      IDs.create(6)
+      esd.create(6)
+      do i = 1,6
+         lab = ATOM:ADP_label(i,form="underscore-123-repeated")
+         IDs(i) = "_atom_site_Cryst_ADP2_"//trim(lab)
+         esd(i) = trim(IDs(i))//"_esu"
+      end
+      cif.read_looped_items(IDs,U,found=fu)
+      DIE_IF(NOT fu,"incomplete precise crystal ADP2 tensor")
+      cif.read_looped_items(esd,dU,found=fd)
+      if (NOT fd) then
+         dU.destroy
+         dU.create(6,labels.dim)
+         dU = ZERO
+      end
+      DIE_IF(U.dim2/=labels.dim,"precise crystal ADP2 labels/values mismatch")
+      U.convert_from("angstrom^2")
+      dU.convert_from("angstrom^2")
+      do i = 1,labels.dim
+         ind = self(:).label.index_of(labels(i))
+         DIE_IF(ind==0,"unmatching atom_site_Cryst_ADP2_U_label, "//trim(labels(i)))
+         self(ind).reset_pADPs_and_errors(9)
+         self(ind).set_ADP_tensor(U(:,i))
+         self(ind).set_ADP2_errors_to(dU(:,i))
+      end
+      .set_ADP_axis_system_to("crystal")
+      dU.destroy
+      U.destroy
+      esd.destroy
+      IDs.destroy
+      labels.destroy
+
    end
 
    read_smCIF_ADP2_cart(cif,fail) :: private, leaky
@@ -17207,6 +17259,7 @@ contains
       xyz,err :: MAT{REAL}@
       tabl1,tabl2 :: VEC{TABLE_COLUMN}@
       fac,fac2 :: REAL
+      i :: INT
 
       ! Unit conversion
       fac  = ANGSTROM_PER_BOHR
@@ -17277,6 +17330,14 @@ contains
       tabl2(3).set_width(tabl1(3).width)
       tabl2(4).set_width(tabl1(4).width)
       tabl2(5).set_width(tabl1(5).width)
+
+      ! Restart fields retain precision independently of publication tables.
+      do i = 2,5
+         tabl1(i).set_width(22)
+         tabl1(i).set_real_precision(12)
+         tabl2(i).set_width(22)
+         tabl2(i).set_real_precision(12)
+      end
 
       ! Put tables
       tabl1.put_body(tabl2)
@@ -17565,6 +17626,14 @@ contains
       tabl2(5).set_width(tabl1(5).width)
       tabl2(6).set_width(tabl1(6).width)
       tabl2(7).set_width(tabl1(7).width)
+
+      ! Restart fields retain precision independently of publication tables.
+      do i = 2,7
+         tabl1(i).set_width(22)
+         tabl1(i).set_real_precision(12)
+         tabl2(i).set_width(22)
+         tabl2(i).set_real_precision(12)
+      end
 
       ! Put tables
       tabl1.put_body(tabl2)

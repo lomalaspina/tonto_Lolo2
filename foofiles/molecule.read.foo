@@ -1325,8 +1325,18 @@ contains
                      .crystal23.fock_mx.allocated)
       end
 
-      .crystal.asymmetric_unit_atom.destroy
-      .crystal.asymmetric_unit_geometry.destroy 
+      ! Keep the experimental asymmetric-unit order separate from source AO order.
+      ! Unit-cell atoms are later used to rebuild the periodic fragment. They
+      ! must retain the imported atom-resolved basis, not only CIF geometry.
+      do a = 1,cif_atom.dim
+         f = .crystal23.xml_atom_for_cif_atom(a)
+         cif_atom(a).set_basis_label(.atom(f).basis_label)
+         cif_atom(a).set_basis_kind(.atom(f).basis_kind)
+      end
+      cif_atom.resolve_bases(.basis,.basis_name)
+      cif_atom.update_kinds
+      .crystal.destroy_asymmetric_unit
+      .crystal.update_fragment_info(cif_atom)
 
       .crystal.update_fragment_info(.atom) ! ".atom" = "xml_atom" has ADP data now
                                           ! .crystal.fragment_atom is now .atom (=xml_atom)

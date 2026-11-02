@@ -2504,9 +2504,9 @@ contains
       do i=1,n_atom
 !         xyzfile.put(.atom(i).atomic_number)
          xyzfile.put(.crystal.asymmetric_unit_atom(i).atomic_number)
-         xyzfile.put(.crystal.asymmetric_unit_geometry(1,i))
-         xyzfile.put(.crystal.asymmetric_unit_geometry(2,i))
-         xyzfile.put(.crystal.asymmetric_unit_geometry(3,i))
+         xyzfile.put(.crystal.asymmetric_unit_geometry(1,i),width=22,precision=12)
+         xyzfile.put(.crystal.asymmetric_unit_geometry(2,i),width=22,precision=12)
+         xyzfile.put(.crystal.asymmetric_unit_geometry(3,i),width=22,precision=12)
          xyzfile.flush
       end
       

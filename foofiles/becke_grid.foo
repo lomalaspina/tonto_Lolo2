@@ -1351,7 +1351,7 @@ contains
    ENSURE(.atom.allocated,"no atom list")
    ENSURE(.unique_atom.allocated,"no unique_atom array")
 
-      u,a,np :: INT
+      u,a,b,np :: INT
       s,s3 :: REAL
 
       ! Create unique-atom points and weights
@@ -1370,6 +1370,15 @@ contains
 
          ! Get "np" points where BF's are large enough
          np = .no_of_pts_for_atom(a)
+
+         ! Quadrature is shared by element, but source-specific basis sets
+         ! can have different radial extents. Keep enough points for every
+         ! member, independently of input ordering. Do not change the atom
+         ! representative used by the separate basis-function grid cache.
+         do b = 1,.atom.dim
+            if (.atom(b).atomic_number/=.atom(a).atomic_number) cycle
+            np = max(np,.no_of_pts_for_atom(b))
+         end
 
          ! Copy only "np" points, weights, and radii
          .atom_pts(u).element.create(np,3)

@@ -345,8 +345,7 @@ contains
 
       umol_atom :: VEC{ATOM}@ ! new source for fragment_atom from unqiue molecules
       i,oi,m,um :: INT
-      prune_ind,Z,Zs,perm :: VEC{INT}@
-      b :: BIN
+      prune_ind :: VEC{INT}@
 
       !stdout.text("Kang Debug: before defragment: .crystal.fragment_atom")
       !.crystal.fragment_atom.put_coordinates(no_header=TRUE)
@@ -383,22 +382,7 @@ contains
       .crystal.n_atoms = .crystal.occupation_list.dim  ! Manually update .crystal.n_atoms 
       prune_ind.destroy                                ! > It should be same to ".crystal.occupation_list.dim"
 
-      !! Sort occupation_list based on atomic_number, so the .crystal.fragment_atom will be sorted
-!>DEBUG      .crystal.put_occupation_list  ! Note: .crystal.n_atom = .crystal.occupation_list.dim
-      Z.create( .crystal.n_atoms )
-      Zs.create(.crystal.n_atoms )
-      perm.create(.crystal.n_atoms)
-
-      Z = CLUSTER_UA_FROM_CODE(.crystal.occupation_list)
-      Z = .crystal.unit_cell_atom(Z).atomic_number
-
-      Zs = Z
-      Zs.sort(decreasing_order=TRUE)
-      Zs.is_permutation_of(Z,b,perm) ! this is a way to get the index ordering from the sorting, b::BIN is dummy
-      
-      .crystal.occupation_list   = .crystal.occupation_list(perm) 
-      .crystal.molecule_for_atom = .crystal.molecule_for_atom(perm)
-!>DEBUG      .crystal.put_occupation_list ! occupation list after sorting
+      ! Retain the surviving occupation order; periodic HAR needs no element sort.
 
       !! Kang's note.
       ! xml_atom's and cif_atom's ADPs are saved at (.molecule).atom 

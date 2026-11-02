@@ -6185,7 +6185,7 @@ contains
       HS_atoms :: VEC{ATOM}@
       sa,  k1,k2,k3,kr,sfr,sfi :: REAL
       n_atom, n_k,n_pt :: INT
-      a,i,k :: INT
+      a,i,k,f,ua :: INT
       sf :: CPX
       tmp_atom :: VEC{ATOM}@
       found,grid_accuracy_was_read :: BIN
@@ -6193,9 +6193,8 @@ contains
 
       .validate_CRYSTAL23_basis_overlap
 
-      ! Asymmetric unit atoms,
-      ! Symmetry-generated K points and/or SF's
-      n_atom = .crystal.asymmetric_unit_atom.dim
+      ! Columns follow the unique fragment atoms used by the fit.
+      n_atom = .crystal.n_unique_frag_atoms
       n_k    = .crystal.n_unique_SF_k_pts
 
       ! Form factor array (leaky)
@@ -6216,65 +6215,52 @@ contains
       .make_slater_interpolators
       .resolve_slaterbases(.crystal.asymmetric_unit_atom)
 
-      ! Make a new crystal only for generating clusters.
-      ! Since we need to define the fragment_geometry to be
-      ! the asymmetric unit for this purpose, but for
-      ! structure refinement we need to stay with the C23
-      ! XML file geometry which is the [-half,+half]^3 cell.
-      ! NOTE: wasteful copy of xray_data is done here
-      ! In case of periodic defragment, .asymmetric_unit_atom(:) are compared with .atom(:)
-      !   If an asym_atom is not found in .atom, then it is manually updated by (CRY23 primitive_cell) lattice translastion.
-      !   Without defragment, all the asym_atoms are always found among .atom(:). 2025.Mar.19 Kang
-
+      ! Generate the stockholder cluster in unique-fragment order. The fit
+      ! uses these representatives for ADPs, derivatives and positional phases.
       cluster = .crystal
 
-!!! // phar_defragment compatibility //
-!
-!! Kang Note. 1-to-1 match between asymmetric_unit_atom(=tmp_atom) and (.molecule).atom (=atoms from Crystal23 xml file)
-!            Without pHAR_defragment, it does basically nothing.
-!            If .asymmetric_unit_atom(a) is not found in .atom, then it is replaced by one of atom(i)
-!            Take a lattice-translation-equivalent atom in atom(:). Use the CRY23 primitive unit cell, not crystallographic .crystal.unit_cell
-!            tmp_atom will be the source of HS_atoms 
-      tmp_atom.create(.crystal.n_asymmetric_unit_atoms)
-      tmp_atom = .crystal.asymmetric_unit_atom
+      ! Translate each centre into the source primitive cell for the finite
+      ! lattice sum. Retain its orientation and unique-fragment column index.
+      tmp_atom.create(n_atom)
+      tmp_atom = .crystal.fragment_atom(.crystal.unique_frag_atom)
+      .resolve_slaterbases(tmp_atom)
 
       do a = 1,tmp_atom.dim
       
-         pos1 = tmp_atom(a).position ! pos1 from asymmetric_unit_atom
+         pos1 = tmp_atom(a).position
          found = FALSE
  
-         do i = 1,.atom.dim  ! Kang comment. It is not efficient search. any found item is not excluded from the search
+         do i = 1,.atom.dim
 
-            pos2 = .atom(i).position ! pos2 from Crystal23 xml_atom (=.atom); .atom is for the ED calculation
+            if (.atom(i).atomic_number/=tmp_atom(a).atomic_number) cycle
+            pos2 = .atom(i).position ! source basis centre for density evaluation
             if (pos1.equals(pos2)) then
-!>DEBUG         stdout.show("cry.asym_atom, .atom" ,[a,i] ) ! Without phar_defragment, it is same to .crystal.asym_atom_for_frag_atom
                found = TRUE 
                exit
             end     
          end
          if (found) cycle
 
-         ! asymmetric_unit_atom is not found in .atom(:). Then find translation-equivalent one from .atom(:)
+         ! Find the same centre modulo a primitive lattice translation.
          do i = 1,.atom.dim
-            pos2 = .atom(i).position - pos1 ! Abusing variable "pos2". Now pos2 is the coordinate difference.
+            if (.atom(i).atomic_number/=tmp_atom(a).atomic_number) cycle
+            pos2 = .atom(i).position - pos1 ! coordinate difference
             pos2 = matmul(.crystal23.Primitive_unit_cell.inverse_mx, pos2)  ! To fractional coord (in C23 primitive cell)
-            pos2 = mod( pos2 + HALF + ONE, ONE ) - HALF ! modulo operation. Map to [-0.5, 0.5)
+            pos2 = modulo(pos2+HALF,ONE)-HALF
 
             if ( pos2.is_zero ) then 
-!               stdout.show("cry.asym_atom translated, .atom" ,[a,i] ) ! Without periodic defragmen
-               tmp_atom(a).set_position( .atom(i).position ) ! Overwrite tmp asym atom
-               ! Kang's note. You may double check by comparing ADPs. 
+               tmp_atom(a).set_position(.atom(i).position)
+               found = TRUE
                exit
             end
-         end         
+         end
+         DIE_IF(NOT found,"CRYSTAL XML form-factor centre has no translated source atom")
       end 
       .crystal.asymmetric_unit_source = "Crystal23-xml-selected-by-tonto"
 
-!! //phar_defragment compatibility// by Kang 2025.Mar.20
-
       cluster.asymmetric_unit_geometry.destroy
       cluster.asymmetric_unit_atom.destroy
-      cluster.update_fragment_info(tmp_atom) ; tmp_atom.destroy ! tmp_atom ~ .asymmetric_unit_atom
+      cluster.update_fragment_info(tmp_atom) ; tmp_atom.destroy
 
       cluster.asymmetric_unit_atom.set_basis_kind("slater")
      
@@ -6315,17 +6301,18 @@ contains
       .becke_grid.set_atom_info(HS_atoms) ! NOT PURE. Kang note: HS_atoms = .becke_grid.atom
       .becke_grid.set_one_atom_grid_data
 
-      ! Loop over asymmetric/unique atoms "c"
-      parallel do a = 1,.crystal.n_asymmetric_unit_atoms
+      ! Loop over unique fragment atoms.
+      parallel do a = 1,n_atom
 
          ! Site-symmetry factor for this atom
-         sa = .crystal.asym_atom_sym_factor(a)
+         f = .crystal.unique_frag_atom(a)
+         ua = .crystal.asym_atom_for_frag_atom(f)
+         sa = .crystal.asym_atom_sym_factor(ua)
          if (sa.is_zero) cycle
          sa = ONE/sa
 
          ! Get the Becke grid for one-atom grid
-         ! For 'a' from 1 to .n_asym_atoms:
-         ! HS_atoms(a) == .asymmetric_unit_atom(a)
+         ! HS_atoms(a) is the source-cell image of unique fragment atom a.
          .becke_grid.make_atom_grid(pt,wt,a)  
          n_pt = pt.dim1
 

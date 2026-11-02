@@ -103,6 +103,29 @@ add_test(NAME refinement_identity
             ${PROJECT_SOURCE_DIR}/basis_sets
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/refinement-identity)
 set_tests_properties(refinement_identity PROPERTIES LABELS "short")
+add_test(NAME cif_precise_adps
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/check_cif_precise_adps.py
+            --program $<TARGET_FILE:run_cif_precise_adps>
+            --basis-directory ${PROJECT_SOURCE_DIR}/basis_sets)
+set_tests_properties(cif_precise_adps PROPERTIES LABELS "short" TIMEOUT 300)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fragment-stabilizers)
+add_test(NAME fragment_stabilizers
+    COMMAND $<TARGET_FILE:run_fragment_stabilizers>
+            ${PROJECT_SOURCE_DIR}/native/fragment_stabilizers.in
+            ${PROJECT_SOURCE_DIR}/basis_sets
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fragment-stabilizers)
+set_tests_properties(fragment_stabilizers PROPERTIES LABELS "short")
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/crystal-xml-ff-identity)
+foreach(input stdin input.cif input.xml source.basis)
+    configure_file(${PROJECT_SOURCE_DIR}/tests/short/crystal_xml_companion_basis/${input}
+                   ${CMAKE_CURRENT_BINARY_DIR}/crystal-xml-ff-identity/${input} COPYONLY)
+endforeach()
+add_test(NAME crystal_xml_ff_identity
+    COMMAND $<TARGET_FILE:run_crystal_xml_ff_identity> ${PROJECT_SOURCE_DIR}/basis_sets
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/crystal-xml-ff-identity)
+set_tests_properties(crystal_xml_ff_identity PROPERTIES LABELS "short")
 
 add_test(NAME xml_overlap_cache_integration
     COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/check_crystal_xml_overlap_cache.py
