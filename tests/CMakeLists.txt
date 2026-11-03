@@ -454,3 +454,6 @@ foreach(_t ${_tonto_tests})
 endforeach()
 unset(_tonto_tests)
 unset(_tonto_test_env)
+# Export-only regression; no private refinement or periodic-density features.
+add_test(NAME reflection_export COMMAND ${PROJECT_BINARY_DIR}/run_reflection_export)
+set_tests_properties(reflection_export PROPERTIES LABELS "short")

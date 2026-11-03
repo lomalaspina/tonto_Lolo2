@@ -3854,17 +3854,63 @@ contains
 !  =============================
 
    F2_exp_scaled_corrected result (res)
-   ! The experimental structure factors squares, F_exp, on an absolute
-   ! scale, and corrected for dispersion (if any).
-   ! Method follows XD (2015) manual p. 45.
-   ! See also Ibers & Hamilton (1964) ACta Cryst. 17 p781.
+   ! Observations on the same absolute-scale/dispersion convention as F_calc.
+   ! Preserve stored intensities, including zero, in the normal dispersion
+   ! routes. The legacy reader may already have clipped negative observations;
+   ! this export cannot recover those originals. Do not square F again here.
       self :: IN
       res :: VEC{REAL}(.xray_data.reflections.dim)
+      fac :: VEC{REAL}@
+      i :: INT
 
    ENSURE(.xray_data.allocated, "no xray_data")
 
-      res = .F_exp_scaled_corrected
-      res = res*res
+      if (.xray_data.remove_dispersion_from_F_exp) then
+         res = .F_exp_scaled_corrected
+         res = res*res
+      else
+         fac = .xray_data.INQ:F_scale_and_extn_correction
+         do i=1,.xray_data.reflections.dim
+            if (.xray_data.reflections(i).I_exp_set) then
+               res(i) = .xray_data.reflections(i).I_exp/(fac(i)*fac(i))
+            else
+               res(i) = .xray_data.reflections(i).F_exp**2/(fac(i)*fac(i))
+            end
+         end
+         fac.destroy
+      end
+
+   end
+
+   F2_sigma_scaled_corrected result (res)
+   ! Transform uncertainty with the same fixed scale/extinction multiplier.
+   ! Never form I_corrected/I_observed: zero observations have finite sigma.
+      self :: IN
+      res :: VEC{REAL}(.xray_data.reflections.dim)
+      fac :: VEC{REAL}@
+      i :: INT
+   ENSURE(.xray_data.allocated, "no xray_data")
+      fac = .xray_data.INQ:F_scale_and_extn_correction
+      if (.xray_data.remove_dispersion_from_F_exp) then
+         ! This older amplitude-target route fits corrected amplitudes with
+         ! F_sigma. Export their propagated squared-amplitude uncertainty.
+         res = TWO*.xray_data.reflections(:).F_corr* &
+                    .xray_data.reflections(:).F_sigma/(fac*fac)
+      else
+         do i=1,.xray_data.reflections.dim
+            if (.xray_data.reflections(i).I_exp_set AND &
+                .xray_data.reflections(i).I_sigma>ZERO) then
+               res(i) = .xray_data.reflections(i).I_sigma/(fac(i)*fac(i))
+            else
+               ! Legacy F-only data: retain the linear propagation away
+               ! from zero, with a sigma(F)^2 floor at vanishing F.
+               res(i) = max(TWO*abs(.xray_data.reflections(i).F_exp)* &
+                  abs(.xray_data.reflections(i).F_sigma), &
+                  .xray_data.reflections(i).F_sigma**2)/(fac(i)*fac(i))
+            end
+         end
+      end
+      fac.destroy
 
    end
 
@@ -3880,37 +3926,20 @@ contains
 !   end
 
    F_exp_scaled_corrected result (res) :: PURE
-   ! The experimental structure factors F_exp on an absolute scale,
-   ! and corrected for dispersion (if any).
-   ! Method follows XD (2015) manual p. 45.
-   ! See also Ibers & Hamilton (1964) Acta Cryst. 17 p781.
+   ! Export the selected observed amplitude on the absolute scale.
+   ! If dispersion is ADDED to F_calc it must remain in F_obs as well.
+   ! The previous abs(F_obs)-abs(F_disp) was neither a complex subtraction
+   ! nor consistent with the exported dispersion-containing F_calc.
       self :: IN
       res :: VEC{REAL}(.xray_data.reflections.dim)
 
    ENSURE(.xray_data.allocated, "no xray_data")
 
-      Fc :: VEC{CPX}@
-
-      if (.xray_data.add_dispersion_to_F_calc) then
-
-         ! Get dispersion correction
-         Fc.create(.xray_data.reflections.dim)
-         .add_dispersion_correction(Fc)
-        
-         ! Get complex F_exp on absolute scale & remove dispersion
-         Fc = .xray_data.INQ:F_exp_on_absolute_scale - abs(Fc)
-
-         ! Get corrected F_exp
-         res = abs(Fc)
-
-         ! Clean
-         Fc.destroy
-
+      if (.xray_data.remove_dispersion_from_F_exp) then
+         res = .xray_data.reflections(:).F_corr / &
+               .xray_data.INQ:F_scale_and_extn_correction
       else
-
-         ! Get F_exp on absolute scale
          res = .xray_data.INQ:F_exp_on_absolute_scale
-
       end
 
    end
@@ -8978,8 +9007,7 @@ contains
       F_sigma.create(n_refl)
 
       F2m = .F2_exp_scaled_corrected
-      fac = F2m/.xray_data.reflections(:).F2_exp
-      F2s = .xray_data.reflections(:).F2_sigma*fac
+      F2s = .F2_sigma_scaled_corrected
       F2c = .xray_data.reflections(:).F2_calc_abs
 
       F_ph    = REFLECTION:F_phase_angle_in_degrees(.xray_data.reflections(:))
@@ -9125,12 +9153,13 @@ contains
    end
 
    put_shelx_fcf6
-   ! Put shelx fcf LIST=6 reflection file
+   ! Put LIST=6 column layout, using the fitted Tonto dispersion convention.
+   ! Fc is an amplitude in this layout, NOT its square.
       self :: INOUT
 
       F000 :: REAL
       fcmax :: REAL
-      F2_cor,factor :: VEC{REAL}@
+      F2_cor,F2_sig :: VEC{REAL}@
       i :: INT
 
       ! Spacegroup information
@@ -9178,6 +9207,8 @@ contains
          stdout.flush
          stdout.show("_shelx_refln_list_code             ", 6,dots=FALSE)
          stdout.show("_shelx_F_calc_maximum              ", fcmax,dots=FALSE)
+         stdout.text("# Tonto fit convention: Fo and Fc retain the selected dispersion treatment.")
+         stdout.text("# This export does not apply SHELXL's additional Fourier-map preprocessing.")
    
          stdout.flush
          stdout.text("loop_")
@@ -9186,19 +9217,19 @@ contains
          stdout.text("    _refln_index_l")
          stdout.text("    _refln_F_squared_meas")
          stdout.text("    _refln_F_squared_sigma")
-         stdout.text("    _refln_F_squared_calc")
+         stdout.text("    _refln_F_calc")
          stdout.text("    _refln_phase_calc")
    
          F2_cor = .F2_exp_scaled_corrected
-         factor = F2_cor/.xray_data.reflections(:).F2_exp
+         F2_sig = .F2_sigma_scaled_corrected
    
          do i = 1,.xray_data.reflections.dim
             stdout.put(.xray_data.reflections(i).h1,width=4)
             stdout.put(.xray_data.reflections(i).h2,width=4)
             stdout.put(.xray_data.reflections(i).h3,width=4)
             stdout.put(F2_cor(i))
-            stdout.put(.xray_data.reflections(i).F2_sigma*factor(i))
-            stdout.put(.xray_data.reflections(i).F2_calc_abs       )
+            stdout.put(F2_sig(i))
+            stdout.put(.xray_data.reflections(i).F_calc_abs        )
             stdout.put(.xray_data.reflections(i).F_phase_angle_in_degrees)
             stdout.flush
          end
@@ -9216,7 +9247,7 @@ contains
 
       F000,F2_cal,F2_exp,F2_sig :: REAL
       F_p :: VEC{CPX}@
-      F_exp,fac,F_sigma :: VEC{REAL}@
+      F2_obs,F2_unc,fac :: VEC{REAL}@
       d_max,d_min :: REAL
       h_max,h_min :: VEC{INT}(3)
       ref :: REFLECTION
@@ -9287,10 +9318,10 @@ contains
          stdout.text("    _refln_F_squared_sigma")
          stdout.text("    _refln_observed_status")
 
-         F_exp = .xray_data.INQ:F_exp_on_absolute_scale ! We can just multiply F_exp b y fac below!
+         F2_obs = .F2_exp_scaled_corrected
+         F2_unc = .F2_sigma_scaled_corrected
          F_p   = .xray_data.INQ:F_pred_cpx
          fac   = ONE/.xray_data.INQ:F_scale_and_extn_correction
-         F_sigma = .xray_data.reflections(:).F_sigma*fac
         
          do i = 1,.xray_data.reflections.dim
 
@@ -9299,12 +9330,8 @@ contains
 
             ! The numbers
          ! F2_cal = ref.F2_calc_abs
-            F2_exp = F_exp(i)*F_exp(i)
-         ! factor = F_exp(i)/ref.F_exp ! scale factor
-         ! F2_sig = fac(i)*fac(i) * F_exp(i) * ref.F_sigma * TWO ! Lorraine, CHECK !!!!
-         ! Lorraine here: Checked, and its wrong, corrected equation
-         ! below. Tested against alanine dataset with scale factor 4.85
-            F2_sig = F_exp(i) * F_sigma(i) * TWO 
+            F2_exp = F2_obs(i)
+            F2_sig = F2_unc(i)
             F_p(i) = F_p(i) * fac(i)
             F2_cal = RE(F_p(i)) * RE(F_p(i)) + IM(F_p(i)) * IM(F_p(i)) 
 

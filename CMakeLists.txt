@@ -1068,6 +1068,8 @@ target_link_libraries(run_fragment_stabilizers tonto_lib ${LAPACK_LIBRARIES} ${M
 add_executable(run_crystal_xml_ff_identity native/test_crystal_xml_ff_identity.F90)
 target_link_libraries(run_crystal_xml_ff_identity tonto_lib ${LAPACK_LIBRARIES} ${MPI_LIBRARIES})
 add_executable(run_crystal_xml_basis_io native/test_crystal_xml_basis_io.f90)
+add_executable(run_reflection_export native/test_reflection_export.f90)
+target_link_libraries(run_reflection_export tonto_lib ${LAPACK_LIBRARIES} ${MPI_LIBRARIES})
 target_link_libraries(run_crystal_xml_basis_io tonto_lib)
 add_executable(run_crystal_xml_overlap_cache native/test_crystal_xml_overlap_cache.F90)
 if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
